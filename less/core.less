@@ -254,11 +254,7 @@ body {
 		article .e-content {
 			.embed-video,
 			div[style*="position:relative"][style*="padding-top"] {
-				width: ~"min(calc(100vw - 1.5rem), 40rem)";
-				max-width: none;
-				margin-left: 50%;
-				margin-right: 0;
-				transform: translateX(-50%);
+				.post-feature-media-frame();
 				padding-top: 0 !important;
 			}
 		}
@@ -758,6 +754,28 @@ body#collection article, body#subpage article {
 body#post article {
 	p.badge {
 		font-size: 0.9em;
+	}
+}
+
+body#post .e-content {
+	p > a:first-child:last-child {
+		.post-feature-media-frame();
+	}
+
+	p > a:first-child:last-child img {
+		display: block;
+		width: 100%;
+		height: auto;
+		max-width: 100%;
+		margin-left: 0;
+		margin-right: 0;
+		transform: none;
+	}
+
+	p > img:first-child {
+		.post-feature-media-frame();
+		height: auto;
+		max-width: none;
 	}
 }
 
@@ -1685,6 +1703,15 @@ div.row {
 }
 pre.code-block {
 	overflow-x: auto;
+}
+
+.post-feature-media-frame() {
+	display: block;
+	width: ~"min(calc(100vw - 1.5rem), 40rem)";
+	max-width: none;
+	margin-left: 50%;
+	margin-right: 0;
+	transform: translateX(-50%);
 }
 
 #emailsub {
