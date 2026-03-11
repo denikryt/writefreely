@@ -1,4 +1,7 @@
 body {
+	@collectionPreviewLightBG: #f7f2e8;
+	@collectionPreviewDarkBG: #222222;
+
 	font-family: @serifFont;
 	font-size-adjust: 0.5;
 	-webkit-font-smoothing: antialiased;
@@ -244,6 +247,23 @@ body {
 					}
 				}
 			}
+			.preview {
+				max-height: 360px;
+				overflow: hidden;
+				position: relative;
+
+				.over {
+					position: absolute;
+					top: 17em;
+					right: 0;
+					bottom: 0;
+					left: 0;
+					background: -moz-linear-gradient(top, fade(@collectionPreviewLightBG, 0%) 0%, fade(@collectionPreviewLightBG, 100%) 100%);
+					background: -webkit-linear-gradient(top, fade(@collectionPreviewLightBG, 0%) 0%, fade(@collectionPreviewLightBG, 100%) 100%);
+					background: linear-gradient(to bottom, fade(@collectionPreviewLightBG, 0%) 0%, fade(@collectionPreviewLightBG, 100%) 100%);
+					filter: none;
+				}
+			}
 			h2 {
 				margin-top: 0em;
 				margin-bottom: 0.25em;
@@ -271,6 +291,15 @@ body {
 		}
 		a.read-more {
 			color: #666;
+		}
+		&.dark,
+		html.dark & {
+			#wrapper .preview .over {
+				background: -moz-linear-gradient(top, fade(@collectionPreviewDarkBG, 0%) 0%, fade(@collectionPreviewDarkBG, 100%) 100%);
+				background: -webkit-linear-gradient(top, fade(@collectionPreviewDarkBG, 0%) 0%, fade(@collectionPreviewDarkBG, 100%) 100%);
+				background: linear-gradient(to bottom, fade(@collectionPreviewDarkBG, 0%) 0%, fade(@collectionPreviewDarkBG, 100%) 100%);
+				filter: none;
+			}
 		}
 	}
 

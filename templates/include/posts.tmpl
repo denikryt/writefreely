@@ -58,8 +58,32 @@
 
 {{if .Excerpt}}<div {{if .Language}}lang="{{.Language.String}}"{{end}} dir="{{.Direction}}" class="book p-summary">{{if and (and (not $.IsOwner) (not $.Format.ShowDates)) (not .Title.String)}}<a class="hidden action" href="{{if $.IsOwner}}/{{$.Alias}}/{{.Slug.String}}{{else}}{{$.CanonicalURL}}{{.Slug.String}}{{end}}">view</a>{{end}}{{.Excerpt}}</div>
 
-<a class="read-more" href="{{$.CanonicalURL}}{{.Slug.String}}">{{localstr "Read more..." .Language.String}}</a>{{else}}<div {{if .Language}}lang="{{.Language.String}}"{{end}} dir="{{.Direction}}" class="book e-content">{{if and (and (not $.IsOwner) (not $.Format.ShowDates)) (not .Title.String)}}<a class="hidden action" href="{{if $.IsOwner}}/{{$.Alias}}/{{.Slug.String}}{{else}}{{$.CanonicalURL}}{{.Slug.String}}{{end}}">view</a>{{end}}{{.HTMLContent}}</div>{{end}}</article>{{ end }}
+<a class="read-more" href="{{$.CanonicalURL}}{{.Slug.String}}">{{localstr "Read more..." .Language.String}}</a>{{else}}<div {{if .Language}}lang="{{.Language.String}}"{{end}} dir="{{.Direction}}" class="book e-content preview">{{if and (and (not $.IsOwner) (not $.Format.ShowDates)) (not .Title.String)}}<a class="hidden action" href="{{if $.IsOwner}}/{{$.Alias}}/{{.Slug.String}}{{else}}{{$.CanonicalURL}}{{.Slug.String}}{{end}}">view</a>{{end}}{{if not .HTMLContent}}<p>{{.Content}}</p>{{else}}{{.HTMLContent}}{{end}}<div class="over">&nbsp;</div></div>
+
+<a class="read-more maybe" href="{{$.CanonicalURL}}{{.Slug.String}}">{{localstr "Read more..." .Language.String}}</a>{{end}}</article>{{ end }}
 {{ end }}
+
+<script type="text/javascript">
+(function() {
+	var articles = document.querySelectorAll('#wrapper article');
+	for (var i = 0; i < articles.length; i++) {
+		var article = articles[i];
+		var more = article.querySelector('.read-more.maybe');
+		var preview = article.querySelector('.e-content.preview');
+		if (more == null || preview == null) {
+			continue;
+		}
+		if (preview.clientHeight < 360) {
+			more.parentNode.removeChild(more);
+			var overlay = article.querySelector('.over');
+			if (overlay != null) {
+				overlay.parentNode.removeChild(overlay);
+			}
+			preview.classList.remove('preview');
+		}
+	}
+})();
+</script>
 
 {{define "paid-badge"}}<img class="paid" alt="Paid article" src="/img/paidarticle.svg" /> {{end}}
 
