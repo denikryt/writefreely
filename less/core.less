@@ -244,6 +244,23 @@ body {
 					}
 				}
 			}
+			.preview {
+				max-height: 360px;
+				overflow: hidden;
+				position: relative;
+
+				.over {
+					position: absolute;
+					top: 17em;
+					right: 0;
+					bottom: 0;
+					left: 0;
+					background: -moz-linear-gradient(top, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
+					background: -webkit-linear-gradient(top, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
+					background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
+					filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#00ffffff', endColorstr='#ffffff', GradientType=0);
+				}
+			}
 			h2 {
 				margin-top: 0em;
 				margin-bottom: 0.25em;
@@ -271,6 +288,15 @@ body {
 		}
 		a.read-more {
 			color: #666;
+		}
+		&.dark,
+		html.dark & {
+			#wrapper .preview .over {
+				background: -moz-linear-gradient(top, rgba(34,34,34,0) 0%, rgba(34,34,34,1) 100%);
+				background: -webkit-linear-gradient(top, rgba(34,34,34,0) 0%, rgba(34,34,34,1) 100%);
+				background: linear-gradient(to bottom, rgba(34,34,34,0) 0%, rgba(34,34,34,1) 100%);
+				filter: none;
+			}
 		}
 	}
 

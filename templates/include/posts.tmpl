@@ -76,6 +76,28 @@
 <a class="read-more maybe" href="{{$postURL}}">{{localstr "Read more..." .Language.String}}</a>{{end}}</article>{{ end }}
 {{ end }}
 
+<script type="text/javascript">
+(function() {
+	var articles = document.querySelectorAll('#wrapper article');
+	for (var i = 0; i < articles.length; i++) {
+		var article = articles[i];
+		var more = article.querySelector('.read-more.maybe');
+		var preview = article.querySelector('.e-content.preview');
+		if (more == null || preview == null) {
+			continue;
+		}
+		if (preview.clientHeight < 360) {
+			more.parentNode.removeChild(more);
+			var overlay = article.querySelector('.over');
+			if (overlay != null) {
+				overlay.parentNode.removeChild(overlay);
+			}
+			preview.classList.remove('preview');
+		}
+	}
+})();
+</script>
+
 {{define "paid-badge"}}<img class="paid" alt="Paid article" src="/img/paidarticle.svg" /> {{end}}
 
 {{define "paging"}}
