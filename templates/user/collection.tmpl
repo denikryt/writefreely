@@ -8,6 +8,31 @@ textarea.section.norm {
 	max-height: 20em;
 	resize: vertical;
 }
+#categories-list {
+	list-style: none;
+	margin: 0 0 1.5em 0;
+	padding: 0;
+}
+#categories-list li {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1em;
+	margin: 0 0 1em 0;
+}
+#categories-list .category-meta {
+	font-size: 0.9em;
+	line-height: 1.5;
+}
+#categories-list .category-meta code {
+	font-size: 0.9em;
+}
+#categories-list .category-meta p.explain {
+	margin: 0.25em 0 0 0;
+}
+#category-form input[type="button"] {
+	font-size: 0.9em;
+}
 @media (pointer: coarse) {
 	.codable {
 		font-size: 0.75em !important;
@@ -188,13 +213,13 @@ textarea.section.norm {
 		<div class="section">
 			<p class="explain">Create internal collections for this blog and use them to group related posts.</p>
 			{{if .Categories}}
-			<ul id="categories-list" style="list-style:none; margin:0 0 1.5em 0; padding:0;">
+			<ul id="categories-list">
 				{{range .Categories}}
-				<li id="category-{{.Slug}}" style="display:flex; align-items:flex-start; justify-content:space-between; gap:1em; margin:0 0 1em 0;">
-					<div>
+				<li id="category-{{.Slug}}">
+					<div class="category-meta">
 						<div><strong>{{.Title}}</strong> <code>/category/{{.Slug}}</code></div>
-						{{if .Description}}<p class="explain" style="margin:0.25em 0 0 0;">{{.Description}}</p>{{end}}
-						<p class="explain" style="margin:0.25em 0 0 0;"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
+						{{if .Description}}<p class="explain">{{.Description}}</p>{{end}}
+						<p class="explain"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
 					</div>
 					<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
 				</li>
