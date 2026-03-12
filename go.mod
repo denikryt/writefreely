@@ -1,5 +1,7 @@
 module github.com/writefreely/writefreely
 
+replace github.com/writeas/web-core => ../web-core
+
 require (
 	github.com/PuerkitoBio/goquery v1.8.1 // indirect
 	github.com/aymerick/douceur v0.2.0

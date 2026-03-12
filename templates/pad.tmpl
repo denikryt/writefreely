@@ -65,6 +65,11 @@
 				<div class="tool"><a href="#publish" title="Publish" id="publish"><img class="ic-24dp" src="/img/ic_send_dark@2x.png" /></a></div>
 			</div>
 		</header>
+		<div id="category-picker" class="hidden" style="padding: 0 1rem 1rem; max-width: 40rem; margin: 0 auto;">
+			<label for="post-categories" style="display:block; margin-bottom:0.5rem; font-size:0.9rem;">Categories</label>
+			<select id="post-categories" multiple size="4" style="width:100%;"></select>
+			<p style="margin-top:0.5rem; font-size:0.8rem; opacity:0.8;">Choose one or more categories for this post.</p>
+		</div>
 
 		<script src="/js/h.js"></script>
 		<script type="text/javascript" src="/js/menu.js"></script>
@@ -109,6 +114,48 @@
 			} else {
 				setTheme('light');
 			}
+		}
+
+		var categoriesByBlog = {{.CategoriesByBlogJSON}};
+		var initialSelectedCategorySlugs = {{.SelectedCategorySlugs}};
+		var $categoryPicker = document.getElementById('category-picker');
+		var $categorySelect = document.getElementById('post-categories');
+
+		function getSelectedCategories() {
+			if (!$categorySelect || $categoryPicker.classList.contains('hidden')) {
+				return [];
+			}
+			var selected = [];
+			for (var i = 0; i < $categorySelect.options.length; i++) {
+				if ($categorySelect.options[i].selected) {
+					selected.push($categorySelect.options[i].value);
+				}
+			}
+			return selected;
+		}
+
+		function renderCategories(targetAlias, selectedSlugs) {
+			if (!$categoryPicker || !$categorySelect) {
+				return;
+			}
+			var categories = categoriesByBlog[targetAlias] || [];
+			$categorySelect.innerHTML = '';
+			if (!categories.length) {
+				$categoryPicker.classList.add('hidden');
+				return;
+			}
+			var selectedMap = {};
+			for (var i = 0; i < selectedSlugs.length; i++) {
+				selectedMap[selectedSlugs[i]] = true;
+			}
+			for (var j = 0; j < categories.length; j++) {
+				var option = document.createElement('option');
+				option.value = categories[j].slug;
+				option.textContent = categories[j].title;
+				option.selected = !!selectedMap[categories[j].slug];
+				$categorySelect.appendChild(option);
+			}
+			$categoryPicker.classList.remove('hidden');
 		}
 
 		var $writer = H.getEl('writer');
@@ -215,6 +262,15 @@
 			}
 			params.crosspost = JSON.parse(xpostTarg);
 			{{ end }}
+			{{if .EditCollection}}
+			params.categories = getSelectedCategories();
+			params.categories_set = true;
+			{{else}}
+			if (postTarget != 'anonymous') {
+				params.categories = getSelectedCategories();
+				params.categories_set = true;
+			}
+			{{end}}
 
 			http.open("POST", url, true);
 
@@ -326,8 +382,12 @@
 				var newText = this.innerText.split(' ');
 				newText.shift();
 				document.getElementById('target-name').innerText = newText.join(' ');
+				renderCategories(targetName, []);
 			});
 		}
+		{{if .EditCollection}}
+		renderCategories('{{.EditCollection.Alias}}', initialSelectedCategorySlugs);
+		{{end}}
 		var postTarget = H.get('postTarget', '{{if .Blogs}}{{$blog := index .Blogs 0}}{{$blog.Alias}}{{else}}anonymous{{end}}');
 		if (location.hash != '') {
 			postTarget = location.hash.substring(1);

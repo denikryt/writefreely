@@ -63,6 +63,16 @@
 					{{if .EditCollection}}
 					<dt><label for="slug">Slug</label></dt>
 					<dd><input type="text" id="slug" name="slug" value="{{.Post.Slug}}" /></dd>
+					{{if .AvailableCategories}}
+					<dt><label for="categories">Categories</label></dt>
+					<dd>
+						<select name="categories" id="categories" class="inputform" multiple size="{{if gt (len .AvailableCategories) 6}}6{{else}}{{len .AvailableCategories}}{{end}}">
+							{{range .AvailableCategories}}<option value="{{.Slug}}"{{if index $.SelectedCategories .Slug}} selected="selected"{{end}}>{{.Title}}</option>{{end}}
+						</select>
+						<p class="description">Hold Ctrl or Command to pick multiple categories.</p>
+						<input type="hidden" name="categories_set" value="true" />
+					</dd>
+					{{end}}
 					{{end}}
 					<dt><label for="lang">Language</label></dt>
 					<dd>

@@ -735,11 +735,18 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 		}
 	}
 
-	stmt, err := db.Prepare("INSERT INTO posts (id, slug, title, content, text_appearance, language, rtl, privacy, owner_id, collection_id, created, updated, view_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + db.now() + ", ?)")
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("INSERT INTO posts (id, slug, title, content, text_appearance, language, rtl, privacy, owner_id, collection_id, created, updated, view_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + db.now() + ", ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer stmt.Close()
+
 	_, err = stmt.Exec(friendlyID, slug, post.Title, post.Content, appearance, post.Language, post.IsRTL, 0, ownerID, ownerCollID, created, 0)
 	if err != nil {
 		if db.isDuplicateKeyErr(err) {
@@ -755,20 +762,32 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 		}
 	}
 
+	if ownerCollID.Valid {
+		if err := db.assignPostCategoriesTx(tx, friendlyID, ownerCollID.Int64, post.Categories); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
 	// TODO: return Created field in proper format
-	return &Post{
+	createdPost := &Post{
 		ID:           friendlyID,
 		Slug:         null.NewString(slug.String, slug.Valid),
 		Font:         appearance,
 		Language:     zero.NewString(post.Language.String, post.Language.Valid),
 		RTL:          zero.NewBool(post.IsRTL.Bool, post.IsRTL.Valid),
 		OwnerID:      null.NewInt(userID, true),
-		CollectionID: null.NewInt(userID, true),
+		CollectionID: null.NewInt(collID, ownerCollID.Valid),
 		Created:      created.Truncate(time.Second).UTC(),
 		Updated:      time.Now().Truncate(time.Second).UTC(),
 		Title:        zero.NewString(*(post.Title), true),
 		Content:      *(post.Content),
-	}, nil
+	}
+	db.attachPostCategories(createdPost)
+	return createdPost, nil
 }
 
 // UpdateOwnedPost updates an existing post with only the given fields in the
@@ -816,7 +835,6 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 		sep = ", "
 		params = append(params, createTime)
 	}
-
 	// WHERE parameters...
 	// id = ?
 	params = append(params, post.ID)
@@ -848,6 +866,23 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 			log.Error("Failed selecting from posts: %v", err)
 		}
 		return nil
+	}
+
+	if post.CategoriesSet {
+		var collID int64
+		err := db.QueryRow("SELECT collection_id FROM posts WHERE id = ? AND owner_id = ?", post.ID, userID).Scan(&collID)
+		switch {
+		case err == sql.ErrNoRows:
+			return ErrUnauthorizedEditPost
+		case err != nil:
+			return err
+		}
+		if collID == 0 {
+			return impart.HTTPError{Status: http.StatusBadRequest, Message: "Only collection posts can be assigned to categories."}
+		}
+		if err := db.AssignPostCategories(post.ID, collID, post.Categories); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1144,6 +1179,7 @@ func (db *datastore) GetEditablePost(id, editToken string) (*PublicPost, error) 
 	}
 
 	res := p.processPost()
+	db.attachPostCategories(p)
 	if ownerName.Valid {
 		res.Owner = &PublicUser{Username: ownerName.String}
 	}
@@ -1229,6 +1265,7 @@ func (db *datastore) GetOwnedPost(id string, ownerID int64) (*PublicPost, error)
 	}
 
 	res := p.processPost()
+	db.attachPostCategories(p)
 
 	return &res, nil
 }
