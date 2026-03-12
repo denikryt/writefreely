@@ -209,33 +209,35 @@ body {
 			margin: 3em auto 4em;
 
 			.description {
-				.social-links {
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					gap: 0.75rem;
-					margin: 1rem 0 0;
-					line-height: 0;
+				& + .social-links {
+					margin-top: 1rem;
 				}
+			}
 
-				.social-links a {
-					color: inherit;
-					display: inline-flex;
-					align-items: center;
-					justify-content: center;
-					text-decoration: none;
-					.transition(0.2s);
+			.social-links {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 0.75rem;
+				line-height: 0;
+			}
 
-					&:hover {
-						opacity: 0.75;
-					}
+			.social-links a {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				text-decoration: none;
+				.transition(0.2s);
+
+				&:hover {
+					opacity: 0.75;
 				}
+			}
 
-				.social-links svg {
-					display: block;
-					width: 2rem;
-					height: 2rem;
-				}
+			.social-links img {
+				display: block;
+				width: 1.5rem;
+				height: 1.5rem;
 			}
 
 			.writeas-prefix {
