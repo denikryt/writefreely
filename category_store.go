@@ -37,6 +37,40 @@ func (db *datastore) CreateCategory(collectionID int64, submitted *SubmittedCate
 	return category, nil
 }
 
+func (db *datastore) UpdateCategory(collectionID int64, currentSlug string, submitted *SubmittedCategory) (*Category, error) {
+	if strings.TrimSpace(submitted.Title) == "" {
+		return nil, impart.HTTPError{Status: http.StatusBadRequest, Message: "Category title is required."}
+	}
+
+	var existingID int64
+	err := db.QueryRow("SELECT id FROM categories WHERE collection_id = ? AND slug = ?", collectionID, currentSlug).Scan(&existingID)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, ErrCollectionPageNotFound
+	case err != nil:
+		return nil, err
+	}
+
+	category := newCategoryFromSubmitted(collectionID, submitted)
+	res, err := db.Exec("UPDATE categories SET slug = ?, title = ?, description = ? WHERE id = ?", category.Slug, category.Title, category.Description, existingID)
+	if err != nil {
+		if db.isDuplicateKeyErr(err) {
+			return nil, impart.HTTPError{Status: http.StatusConflict, Message: "Category slug already exists on this blog."}
+		}
+		return nil, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return nil, ErrCollectionPageNotFound
+	}
+
+	updated, err := db.GetCategoryBySlug(collectionID, category.Slug)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 func (db *datastore) DeleteCategory(collectionID int64, slug string) error {
 	tx, err := db.Begin()
 	if err != nil {

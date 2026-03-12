@@ -202,6 +202,52 @@ func createCollectionCategory(app *App, w http.ResponseWriter, r *http.Request) 
 	return impart.WriteSuccess(w, category, http.StatusCreated)
 }
 
+func updateCollectionCategory(app *App, w http.ResponseWriter, r *http.Request) error {
+	vars := mux.Vars(r)
+	coll, err := app.db.GetCollection(vars["alias"])
+	if err != nil {
+		return err
+	}
+	reqJSON := IsJSON(r)
+
+	if _, err := collectionOwnerIDForRequest(app, r, coll); err != nil {
+		return err
+	}
+
+	var submitted SubmittedCategory
+	if reqJSON {
+		if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
+			return ErrBadJSON
+		}
+	} else {
+		if err := r.ParseForm(); err != nil {
+			return ErrBadFormData
+		}
+		if err := app.formDecoder.Decode(&submitted, r.PostForm); err != nil {
+			return ErrBadFormData
+		}
+	}
+	if strings.TrimSpace(submitted.Title) == "" {
+		return impart.HTTPError{Status: http.StatusBadRequest, Message: "Category title is required."}
+	}
+
+	category, err := app.db.UpdateCategory(coll.ID, vars["slug"], &submitted)
+	if err != nil {
+		if !reqJSON {
+			if httpErr, ok := err.(impart.HTTPError); ok {
+				addSessionFlash(app, w, r, httpErr.Message, nil)
+				return impart.HTTPError{Status: http.StatusFound, Message: "/me/c/" + coll.Alias}
+			}
+		}
+		return err
+	}
+	if !reqJSON {
+		addSessionFlash(app, w, r, "Category updated!", nil)
+		return impart.HTTPError{Status: http.StatusFound, Message: "/me/c/" + coll.Alias}
+	}
+	return impart.WriteSuccess(w, category, http.StatusOK)
+}
+
 func assignPostCategories(app *App, w http.ResponseWriter, r *http.Request) error {
 	vars := mux.Vars(r)
 	coll, err := app.db.GetCollection(vars["alias"])
