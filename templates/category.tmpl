@@ -1,11 +1,22 @@
 {{define "category"}}<!DOCTYPE HTML>
-<html>
+<html class="light" {{if .Language}}lang="{{.Language}}"{{end}} dir="{{.Direction}}">
 	<head prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
 		<meta charset="utf-8">
+		<script type="text/javascript">
+			(function () {
+				var theme = localStorage.getItem('padTheme');
+				if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+					theme = 'dark';
+				}
+				document.documentElement.classList.remove('light', 'dark');
+				document.documentElement.classList.add(theme || 'light');
+			})();
+		</script>
 
 		<title>{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}</title>
 
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<link rel="shortcut icon" href="/favicon.ico" />
 		{{if not .Collection.IsPrivate}}<link rel="alternate" type="application/rss+xml" title="{{.Category.Title}} posts on {{.DisplayTitle}}" href="{{.CanonicalURL}}category/{{.Category.Slug}}/feed/" />{{end}}
@@ -185,4 +196,6 @@ function pinPost(e, postID, slug, title) {
 }
 	</script>
 	{{end}}
+	<a id="global-theme-toggle" class="global-theme-toggle global-theme-toggle--floating" href="#theme" title="Toggle theme" data-theme-toggle="true"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a>
+	<script src="/js/theme.js"></script>
 </html>{{end}}

@@ -71,7 +71,9 @@
 
 {{if .Excerpt}}<div {{if .Language}}lang="{{.Language.String}}"{{end}} dir="{{.Direction}}" class="book p-summary">{{if and (and (not $.IsOwner) (not $.Format.ShowDates)) (not .Title.String)}}<a class="hidden action" href="{{$postURL}}">view</a>{{end}}{{.Excerpt}}</div>
 
-<a class="read-more" href="{{$postURL}}">{{localstr "Read more..." .Language.String}}</a>{{else}}<div {{if .Language}}lang="{{.Language.String}}"{{end}} dir="{{.Direction}}" class="book e-content">{{if and (and (not $.IsOwner) (not $.Format.ShowDates)) (not .Title.String)}}<a class="hidden action" href="{{$postURL}}">view</a>{{end}}{{.HTMLContent}}</div>{{end}}</article>{{ end }}
+<a class="read-more" href="{{$postURL}}">{{localstr "Read more..." .Language.String}}</a>{{else}}<div {{if .Language}}lang="{{.Language.String}}"{{end}} dir="{{.Direction}}" class="book e-content preview">{{if and (and (not $.IsOwner) (not $.Format.ShowDates)) (not .Title.String)}}<a class="hidden action" href="{{$postURL}}">view</a>{{end}}{{if not .HTMLContent}}<p>{{.Content}}</p>{{else}}{{.HTMLContent}}{{end}}<div class="over">&nbsp;</div></div>
+
+<a class="read-more maybe" href="{{$postURL}}">{{localstr "Read more..." .Language.String}}</a>{{end}}</article>{{ end }}
 {{ end }}
 
 {{define "paid-badge"}}<img class="paid" alt="Paid article" src="/img/paidarticle.svg" /> {{end}}
