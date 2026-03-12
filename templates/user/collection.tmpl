@@ -184,6 +184,39 @@ textarea.section.norm {
 	</div>
 
 	<div class="option">
+		<h2>Categories</h2>
+		<div class="section">
+			<p class="explain">Create internal collections for this blog and use them to group related posts.</p>
+			{{if .Categories}}
+			<ul id="categories-list" style="list-style:none; margin:0 0 1.5em 0; padding:0;">
+				{{range .Categories}}
+				<li id="category-{{.Slug}}" style="display:flex; align-items:flex-start; justify-content:space-between; gap:1em; margin:0 0 1em 0;">
+					<div>
+						<div><strong>{{.Title}}</strong> <code>/category/{{.Slug}}</code></div>
+						{{if .Description}}<p class="explain" style="margin:0.25em 0 0 0;">{{.Description}}</p>{{end}}
+						<p class="explain" style="margin:0.25em 0 0 0;"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
+					</div>
+					<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
+				</li>
+				{{end}}
+			</ul>
+			{{else}}
+			<p class="explain" id="categories-empty">No categories yet.</p>
+			{{end}}
+
+			<ul id="category-errors" class="errors"></ul>
+
+			<div id="category-form" style="margin-top:1em;">
+				<p><input type="text" id="category-title" placeholder="Category title" maxlength="255" style="width:100%" /></p>
+				<p><input type="text" id="category-slug" placeholder="category-slug (optional)" maxlength="100" style="width:100%" /></p>
+				<p><textarea id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
+				<p class="explain">If slug is empty, it will be generated from the title.</p>
+				<p><input type="button" id="create-category" value="Create category" onclick="createCategory()" /></p>
+			</div>
+		</div>
+	</div>
+
+	<div class="option">
 		<h2>Post Signature</h2>
 		<div class="section">
 			<p class="explain">This content will be added to the end of every post on this blog, as if it were part of the post itself. Markdown, HTML, and shortcodes are allowed.</p>
@@ -284,6 +317,68 @@ function disableSubmit() {
 }
 function promptDelete() {
 	showModal("delete");
+}
+
+function createCategory() {
+	var title = document.getElementById('category-title').value;
+	var slug = document.getElementById('category-slug').value;
+	var description = document.getElementById('category-description').value;
+	var button = document.getElementById('create-category');
+	document.getElementById('category-errors').innerHTML = '';
+
+	button.disabled = true;
+	button.value = 'Creating...';
+
+	var http = new XMLHttpRequest();
+	var url = "/api/collections/{{.Alias}}/categories";
+	http.open("POST", url, true);
+	http.setRequestHeader("Content-type", "application/json");
+	http.onreadystatechange = function() {
+		if (http.readyState == 4) {
+			if (http.status == 201 || http.status == 200) {
+				window.location = '/me/c/{{.Alias}}';
+			} else if (http.status == 302 || http.status == 301) {
+				window.location = '/me/c/{{.Alias}}';
+			} else {
+				var data = JSON.parse(http.responseText);
+				document.getElementById('category-errors').innerHTML = '<li class="urgent">' + data.error_msg + '</li>';
+				button.disabled = false;
+				button.value = 'Create category';
+			}
+		}
+	};
+	http.send(JSON.stringify({
+		title: title,
+		slug: slug,
+		description: description,
+	}));
+}
+
+function deleteCategory(slug, title, button) {
+	if (!confirm('Delete category "' + title + '"? Posts will stay published, but category assignments will be removed.')) {
+		return;
+	}
+	document.getElementById('category-errors').innerHTML = '';
+	button.disabled = true;
+	button.innerHTML = 'Deleting...';
+
+	var http = new XMLHttpRequest();
+	var url = "/api/collections/{{.Alias}}/categories/" + encodeURIComponent(slug);
+	http.open("DELETE", url, true);
+	http.setRequestHeader("Content-type", "application/json");
+	http.onreadystatechange = function() {
+		if (http.readyState == 4) {
+			if (http.status == 204 || http.status == 200) {
+				window.location = '/me/c/{{.Alias}}';
+			} else {
+				var data = JSON.parse(http.responseText);
+				document.getElementById('category-errors').innerHTML = '<li class="urgent">' + data.error_msg + '</li>';
+				button.disabled = false;
+				button.innerHTML = 'Delete';
+			}
+		}
+	};
+	http.send(null);
 }
 
 var $fediDomain = document.getElementById('fedi-domain');

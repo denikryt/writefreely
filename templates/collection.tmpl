@@ -95,6 +95,9 @@
 		{{end}}
 		<h1 dir="{{.Direction}}" id="blog-title">{{if .Posts}}{{else}}<span class="writeas-prefix"><a href="/">write.as</a></span> {{end}}<a href="/{{if .IsTopLevel}}{{else}}{{.Prefix}}{{.Alias}}/{{end}}" class="h-card p-author u-url" rel="me author">{{.DisplayTitle}}</a></h1>
 		{{if .Description}}<p class="description p-note">{{.DisplayDescription}}</p>{{end}}
+		{{if .Categories}}<nav class="collection-categories">
+			{{range .Categories}}<a class="category" href="{{$.CanonicalURL}}category/{{.Slug}}">{{.Title}}</a>{{end}}
+		</nav>{{end}}
 		{{/*if not .Public/*}}
 			<!--p class="meta-note"><span>Private collection</span>. Only you can see this page.</p-->
 		{{/*end*/}}

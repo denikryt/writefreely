@@ -1,0 +1,94 @@
+{{define "category"}}<!DOCTYPE HTML>
+<html>
+	<head prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
+		<meta charset="utf-8">
+
+		<title>{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}</title>
+
+		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
+		<link rel="shortcut icon" href="/favicon.ico" />
+		{{if not .Collection.IsPrivate}}<link rel="alternate" type="application/rss+xml" title="{{.Category.Title}} posts on {{.DisplayTitle}}" href="{{.CanonicalURL}}category/{{.Category.Slug}}/feed/" />{{end}}
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="canonical" href="{{.CanonicalURL}}category/{{.Category.Slug}}" />
+		<meta name="generator" content="Write.as">
+		<meta name="title" content="{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}">
+		<meta name="description" content="{{.Category.Title}} posts on {{.Collection.DisplayTitle}}">
+		<meta name="application-name" content="Write.as">
+		<meta name="application-url" content="https://write.as">
+		{{if gt .Views 1}}<meta name="twitter:label1" value="Views">
+		<meta name="twitter:data1" value="{{largeNumFmt .Views}}">{{end}}
+		<meta itemprop="name" content="{{.Collection.DisplayTitle}}">
+		<meta itemprop="description" content="{{.Category.Title}} posts on {{.Collection.DisplayTitle}}">
+		<meta name="twitter:card" content="summary">
+		<meta name="twitter:site" content="@writeas__">
+		<meta name="twitter:description" content="{{.Category.Title}} posts on {{.Collection.DisplayTitle}}">
+		<meta name="twitter:title" content="{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}">
+		<meta name="twitter:image" content="{{.Collection.AvatarURL}}">
+		<meta property="og:title" content="{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}" />
+		<meta property="og:site_name" content="{{.DisplayTitle}}" />
+		<meta property="og:type" content="article" />
+		<meta property="og:url" content="{{.CanonicalURL}}category/{{.Category.Slug}}" />
+		<meta property="og:image" content="{{.Collection.AvatarURL}}">
+		{{template "collection-meta" .}}
+		{{if .Collection.StyleSheet}}<style type="text/css">{{.Collection.StyleSheetDisplay}}</style>{{end}}
+
+		{{if .Collection.RenderMathJax}}
+		  {{template "mathjax" .}}
+		{{end}}
+
+		{{template "highlighting" . }}
+	</head>
+	<body id="subpage">
+		<div id="overlay"></div>
+
+		<header>
+		<h1 dir="{{.Direction}}" id="blog-title"><a href="{{if .IsTopLevel}}/{{else}}/{{.Collection.Alias}}/{{end}}" class="h-card p-author">{{.Collection.DisplayTitle}}</a></h1>
+			<nav>
+				{{if .PinnedPosts}}
+				{{range .PinnedPosts}}<a class="pinned" href="{{if not $.SingleUser}}/{{$.Collection.Alias}}/{{.Slug.String}}{{else}}{{.CanonicalURL $.Host}}{{end}}">{{.DisplayTitle}}</a>{{end}}
+				{{end}}
+			</nav>
+		</header>
+
+		{{if .Silenced}}
+			{{template "user-silenced"}}
+		{{end}}
+		{{if .Posts}}<section id="wrapper" itemscope itemtype="http://schema.org/Blog">{{else}}<div id="wrapper">{{end}}
+			<h1>{{.Category.Title}}</h1>
+			{{if .Category.Description}}<p class="description">{{.Category.Description}}</p>{{end}}
+			{{if eq .Category.PostCount 0}}<p class="description">There are no posts in this category yet.</p>{{end}}
+			{{template "posts" .}}
+
+		{{if gt .TotalPages 1}}<nav id="paging" class="content-container clearfix">
+			{{if or (and .Format.Ascending (lt .CurrentPage .TotalPages)) (isRTL .Direction)}}
+				{{if gt .CurrentPage 1}}<a href="{{.PrevPageURL .Prefix .CurrentPage .IsTopLevel}}">&#8672; {{if and .Format.Ascending (lt .CurrentPage .TotalPages)}}Previous{{else}}Newer{{end}}</a>{{end}}
+				{{if lt .CurrentPage .TotalPages}}<a style="float:right;" href="{{.NextPageURL .Prefix .CurrentPage .IsTopLevel}}">{{if and .Format.Ascending (lt .CurrentPage .TotalPages)}}Next{{else}}Older{{end}} &#8674;</a>{{end}}
+			{{else}}
+				{{if lt .CurrentPage .TotalPages}}<a href="{{.NextPageURL .Prefix .CurrentPage .IsTopLevel}}">&#8672; Older</a>{{end}}
+				{{if gt .CurrentPage 1}}<a style="float:right;" href="{{.PrevPageURL .Prefix .CurrentPage .IsTopLevel}}">Newer &#8674;</a>{{end}}
+			{{end}}
+		</nav>{{end}}
+
+		{{if .Posts}}</section>{{else}}</div>{{end}}
+
+		{{ if .Collection.ShowFooterBranding }}
+		<footer dir="ltr">
+			<hr>
+			<nav>
+				<p style="font-size: 0.9em"><a class="home pubd" href="/">{{.SiteName}}</a> &middot; powered by <a style="margin-left:0" href="https://writefreely.org">writefreely</a></p>
+			</nav>
+		</footer>
+		{{ end }}
+	</body>
+
+	{{if .CanShowScript}}
+		{{range .ExternalScripts}}<script type="text/javascript" src="{{.}}" async></script>{{end}}
+		{{if .Collection.Script}}<script type="text/javascript">{{.ScriptDisplay}}</script>{{end}}
+	{{end}}
+	<script src="/js/localdate.js"></script>
+	{{if .IsOwner}}
+	<script src="/js/h.js"></script>
+	<script src="/js/postactions.js"></script>
+	{{end}}
+</html>{{end}}

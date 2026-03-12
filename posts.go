@@ -90,13 +90,15 @@ type (
 	// updating. Since Title and Content can be updated to "", they are
 	// pointers that can be easily tested to detect changes.
 	SubmittedPost struct {
-		Slug     *string                  `json:"slug" schema:"slug"`
-		Title    *string                  `json:"title" schema:"title"`
-		Content  *string                  `json:"body" schema:"body"`
-		Font     string                   `json:"font" schema:"font"`
-		IsRTL    converter.NullJSONBool   `json:"rtl" schema:"rtl"`
-		Language converter.NullJSONString `json:"lang" schema:"lang"`
-		Created  *string                  `json:"created" schema:"created"`
+		Slug          *string                  `json:"slug" schema:"slug"`
+		Title         *string                  `json:"title" schema:"title"`
+		Content       *string                  `json:"body" schema:"body"`
+		Font          string                   `json:"font" schema:"font"`
+		IsRTL         converter.NullJSONBool   `json:"rtl" schema:"rtl"`
+		Language      converter.NullJSONString `json:"lang" schema:"lang"`
+		Created       *string                  `json:"created" schema:"created"`
+		Categories    []string                 `json:"categories" schema:"categories"`
+		CategoriesSet bool                     `json:"categories_set" schema:"categories_set"`
 	}
 
 	// Post represents a post as found in the database.
@@ -120,6 +122,7 @@ type (
 		HTMLContent    template.HTML `db:"content" json:"-"`
 		HTMLExcerpt    template.HTML `db:"content" json:"-"`
 		Tags           []string      `json:"tags"`
+		Categories     []Category    `json:"categories,omitempty"`
 		Images         []string      `json:"images,omitempty"`
 		IsPaid         bool          `json:"paid"`
 
@@ -172,6 +175,7 @@ type (
 		Updated      time.Time
 		IsRTL        sql.NullBool
 		Language     sql.NullString
+		Categories   []Category
 		OwnerID      int64
 		CollectionID sql.NullInt64
 
@@ -702,18 +706,24 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	reqJSON := IsJSON(r)
 	vars := mux.Vars(r)
 	postID := vars["post"]
+	collectionAlias := vars["alias"]
 
 	p := AuthenticatedPost{ID: postID}
 	var err error
 
 	if reqJSON {
-		// Decode JSON request
+		var req struct {
+			Web bool `json:"web"`
+			SubmittedPost
+		}
 		decoder := json.NewDecoder(r.Body)
-		err = decoder.Decode(&p)
+		err = decoder.Decode(&req)
 		if err != nil {
 			log.Error("Couldn't parse post update JSON request: %v\n", err)
 			return ErrBadJSON
 		}
+		p.Web = req.Web
+		p.SubmittedPost = &req.SubmittedPost
 	} else {
 		err = r.ParseForm()
 		if err != nil {
@@ -721,13 +731,18 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 			return ErrBadFormData
 		}
 
-		// Can't decode to a nil SubmittedPost property, so create instance now
-		p.SubmittedPost = &SubmittedPost{}
-		err = app.formDecoder.Decode(&p, r.PostForm)
+		var req struct {
+			Web bool `schema:"web"`
+			SubmittedPost
+		}
+		err = app.formDecoder.Decode(&req, r.PostForm)
 		if err != nil {
 			log.Error("Couldn't decode post update form request: %v\n", err)
 			return ErrBadFormData
 		}
+		p.Web = req.Web
+		p.SubmittedPost = &req.SubmittedPost
+		_, p.CategoriesSet = r.PostForm["categories_set"]
 	}
 
 	if p.Web {
@@ -788,6 +803,19 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if collectionAlias != "" {
+		coll, collErr := app.db.GetCollection(collectionAlias)
+		if collErr != nil {
+			return collErr
+		}
+		if coll.OwnerID != userID {
+			return ErrForbiddenCollection
+		}
+		if _, collErr = app.db.Exec("UPDATE posts SET collection_id = ? WHERE id = ? AND owner_id = ? AND collection_id IS NULL", coll.ID, p.ID, userID); collErr != nil {
+			return collErr
+		}
+	}
+
 	var pRes *PublicPost
 	pRes, err = app.db.GetPost(p.ID, 0)
 	if reqJSON {
@@ -812,18 +840,21 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	addSessionFlash(app, w, r, "Changes saved.", nil)
-	collectionAlias := vars["alias"]
 	redirect := "/" + postID + "/meta"
-	if collectionAlias != "" {
+	if pRes.CollectionID.Valid && pRes.Slug.Valid {
 		collPre := "/" + collectionAlias
+		if collectionAlias == "" {
+			if coll, collErr := app.db.GetCollectionBy("id = ?", pRes.CollectionID.Int64); collErr == nil {
+				collectionAlias = coll.Alias
+				collPre = "/" + collectionAlias
+			}
+		}
 		if app.cfg.App.SingleUser {
 			collPre = ""
 		}
 		redirect = collPre + "/" + pRes.Slug.String + "/edit/meta"
-	} else {
-		if app.cfg.App.SingleUser {
-			redirect = "/d" + redirect
-		}
+	} else if app.cfg.App.SingleUser {
+		redirect = "/d" + redirect
 	}
 	w.Header().Set("Location", redirect)
 	w.WriteHeader(http.StatusFound)
@@ -868,6 +899,9 @@ func deletePost(app *App, w http.ResponseWriter, r *http.Request) error {
 			// unexpectedly. So prevent deletion via token.
 			return impart.HTTPError{http.StatusConflict, "This post belongs to some user (hopefully yours). Please log in and delete it from that user's account."}
 		}
+		if _, err = app.db.Exec("DELETE FROM post_categories WHERE post_id = ?", friendlyID); err != nil {
+			return err
+		}
 		res, err = app.db.Exec("DELETE FROM posts WHERE id = ? AND modify_token = ? AND owner_id IS NULL", friendlyID, editToken)
 	} else if accessToken != "" || u != nil {
 		// Caller provided some way to authenticate; assume caller expects the
@@ -890,6 +924,9 @@ func deletePost(app *App, w http.ResponseWriter, r *http.Request) error {
 		}
 		if !collID.Valid {
 			// There's no collection; simply delete the post
+			if _, err = app.db.Exec("DELETE FROM post_categories WHERE post_id = ?", friendlyID); err != nil {
+				return err
+			}
 			res, err = app.db.Exec("DELETE FROM posts WHERE id = ? AND owner_id = ?", friendlyID, ownerID)
 		} else {
 			// Post belongs to a collection; do any additional clean up
@@ -912,6 +949,10 @@ func deletePost(app *App, w http.ResponseWriter, r *http.Request) error {
 			t, err = app.db.Begin()
 			if err != nil {
 				log.Error("No begin: %v", err)
+				return err
+			}
+			if _, err = t.Exec("DELETE FROM post_categories WHERE post_id = ?", friendlyID); err != nil {
+				t.Rollback()
 				return err
 			}
 			res, err = t.Exec("DELETE FROM posts WHERE id = ? AND owner_id = ?", friendlyID, ownerID)
@@ -1381,12 +1422,14 @@ func (p *SubmittedPost) isFontValid() bool {
 
 func getRawPost(app *App, friendlyID string) *RawPost {
 	var content, font, title string
+	var slug sql.NullString
 	var isRTL sql.NullBool
 	var lang sql.NullString
 	var ownerID sql.NullInt64
+	var collectionID sql.NullInt64
 	var created, updated time.Time
 
-	err := app.db.QueryRow("SELECT title, content, text_appearance, language, rtl, created, updated, owner_id FROM posts WHERE id = ?", friendlyID).Scan(&title, &content, &font, &lang, &isRTL, &created, &updated, &ownerID)
+	err := app.db.QueryRow("SELECT slug, title, content, text_appearance, language, rtl, created, updated, owner_id, collection_id FROM posts WHERE id = ?", friendlyID).Scan(&slug, &title, &content, &font, &lang, &isRTL, &created, &updated, &ownerID, &collectionID)
 	switch {
 	case err == sql.ErrNoRows:
 		return &RawPost{Content: "", Found: false, Gone: false}
@@ -1395,7 +1438,8 @@ func getRawPost(app *App, friendlyID string) *RawPost {
 		return &RawPost{Content: "", Found: true, Gone: false}
 	}
 
-	return &RawPost{
+	post := &RawPost{
+		Slug:     slug.String,
 		Title:    title,
 		Content:  content,
 		Font:     font,
@@ -1404,9 +1448,12 @@ func getRawPost(app *App, friendlyID string) *RawPost {
 		IsRTL:    isRTL,
 		Language: lang,
 		OwnerID:  ownerID.Int64,
+		CollectionID: collectionID,
 		Found:    true,
 		Gone:     content == "" && title == "",
 	}
+	post.Categories, _ = app.db.GetPostCategories(friendlyID)
+	return post
 
 }
 
@@ -1433,7 +1480,7 @@ func getRawCollectionPost(app *App, slug, collAlias string) *RawPost {
 		return &RawPost{Content: "", Found: true, Gone: false}
 	}
 
-	return &RawPost{
+	post := &RawPost{
 		Id:       id,
 		Slug:     slug,
 		Title:    title,
@@ -1448,6 +1495,8 @@ func getRawCollectionPost(app *App, slug, collAlias string) *RawPost {
 		Gone:     content == "" && title == "",
 		Views:    views,
 	}
+	post.Categories, _ = app.db.GetPostCategories(id)
+	return post
 }
 
 func isRaw(r *http.Request) bool {

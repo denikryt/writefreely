@@ -59,13 +59,12 @@
 			</div>
 			<noscript style="margin-left: 2em;"><strong>NOTE</strong>: for now, you'll need JavaScript enabled to post.</noscript>
 			<div id="belt">
-				{{if .Editing}}<div class="tool hidden if-room"><a href="{{if .EditCollection}}{{.EditCollection.CanonicalURL}}{{.Post.Slug}}/edit/meta{{else}}/{{if .SingleUser}}d/{{end}}{{.Post.Id}}/meta{{end}}" title="Edit post metadata" id="edit-meta"><img class="ic-24dp" src="/img/ic_info_dark@2x.png" /></a></div>{{end}}
+				{{if .Editing}}<div class="tool hidden if-room"><a href="{{if and .EditCollection .Post.Slug .Post.CollectionID.Valid}}{{.EditCollection.CanonicalURL}}{{.Post.Slug}}/edit/meta{{else}}/{{if .SingleUser}}d/{{end}}{{.Post.Id}}/meta{{end}}" title="Edit post metadata" id="edit-meta"><img class="ic-24dp" src="/img/ic_info_dark@2x.png" /></a></div>{{end}}
 				<div class="tool hidden if-room room-2"><a href="#theme" title="Toggle theme" id="toggle-theme"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a></div>
 				<div class="tool if-room room-1"><a href="{{if not .User}}/pad/posts{{else}}/me/posts/{{end}}" title="View posts" id="view-posts"><img class="ic-24dp" src="/img/ic_list_dark@2x.png" /></a></div>
 				<div class="tool"><a href="#publish" title="Publish" id="publish"><img class="ic-24dp" src="/img/ic_send_dark@2x.png" /></a></div>
 			</div>
 		</header>
-
 		<script src="/js/h.js"></script>
 		<script type="text/javascript" src="/js/menu.js"></script>
 		<script>
@@ -215,7 +214,6 @@
 			}
 			params.crosspost = JSON.parse(xpostTarg);
 			{{ end }}
-
 			http.open("POST", url, true);
 
 			// Send the proper header information along with the request
@@ -328,7 +326,16 @@
 				document.getElementById('target-name').innerText = newText.join(' ');
 			});
 		}
+		{{if .EditCollection}}
+		renderCategories('{{.EditCollection.Alias}}', initialSelectedCategorySlugs);
+		{{end}}
 		var postTarget = H.get('postTarget', '{{if .Blogs}}{{$blog := index .Blogs 0}}{{$blog.Alias}}{{else}}anonymous{{end}}');
+		{{if and .SingleUser .Blogs}}
+		if (postTarget == 'anonymous') {
+			postTarget = '{{with index .Blogs 0}}{{.Alias}}{{end}}';
+			H.set('postTarget', postTarget);
+		}
+		{{end}}
 		if (location.hash != '') {
 			postTarget = location.hash.substring(1);
 			// TODO: pushState to /pad (or whatever the URL is) so we live on a clean URL
