@@ -6,6 +6,7 @@
 		
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
 		<link rel="stylesheet" type="text/css" href="/css/prose.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -328,25 +329,6 @@
 			H.set('postTarget', postTarget);
 		}
 
-		var sansLoaded = false;
-		WebFontConfig = {
-			custom: { families: [ 'Lora:400,700:latin' ], urls: [ '/css/fonts.css' ] }
-		};
-		var loadSans = function() {
-		  if (sansLoaded) return;
-		  sansLoaded = true;
-		  WebFontConfig.custom.families.push('Open+Sans:400,700:latin');
-		  try {
-			  (function() {
-				var wf=document.createElement('script');
-				wf.src = '/js/webfont.js';
-				wf.type='text/javascript';
-				wf.async='true';
-				var s=document.getElementsByTagName('script')[0];
-				s.parentNode.insertBefore(wf, s);
-			  })();
-		  } catch (e) {}
-		};
 		var fonts = document.querySelectorAll('nav#font-picker a.font');
 		var setEditorFontClass = function(fontClass) {
 			if (window.editorView) {
@@ -363,9 +345,6 @@
 				document.querySelector('nav#font-picker li.selected').classList.remove('selected');
 				this.parentElement.classList.add('selected');
 				H.set('{{if .Editing}}draft{{.Post.Id}}font{{else}}padFont{{end}}', selectedFont);
-				if (selectedFont == 'sans') {
-					loadSans();
-				}
 			});
 		}
 		var selectedFont = H.get('{{if .Editing}}draft{{.Post.Id}}font{{else}}padFont{{end}}', '{{.Post.Font}}');
@@ -388,19 +367,6 @@
 				doneTyping();
 			}
 		});
-
-		try {
-		  (function() {
-			var wf=document.createElement('script');
-			wf.src = '/js/webfont.js';
-			wf.type='text/javascript';
-			wf.async='true';
-			var s=document.getElementsByTagName('script')[0];
-			s.parentNode.insertBefore(wf, s);
-		  })();
-		} catch (e) {
-		  // whatevs
-		}
 		</script>
 		<script src="/js/prose.bundle.js"></script>
 		<link href="/css/icons.css" rel="stylesheet">

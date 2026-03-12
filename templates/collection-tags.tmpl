@@ -6,6 +6,7 @@
 		<title>{{.Tag}} &mdash; {{.Collection.DisplayTitle}}</title>
 		
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<link rel="shortcut icon" href="/favicon.ico" />
 		{{if not .Collection.IsPrivate}}<link rel="alternate" type="application/rss+xml" title="{{.Tag}} posts on {{.DisplayTitle}}" href="{{.CanonicalURL}}tag:{{.Tag}}/feed/" />{{end}}
@@ -194,18 +195,5 @@ function pinPost(e, postID, slug, title) {
 	http.send(JSON.stringify(params));
 };
 {{end}}
-	try { // Fonts
-	  WebFontConfig = {
-		custom: { families: [ 'Lora:400,700:latin', 'Open+Sans:400,700:latin' ], urls: [ '/css/fonts.css' ] }
-	  };
-	  (function() {
-		var wf = document.createElement('script');
-		wf.src = '/js/webfont.js';
-		wf.type = 'text/javascript';
-		wf.async = 'true';
-		var s = document.getElementsByTagName('script')[0];
-		s.parentNode.insertBefore(wf, s);
-	  })();
-	} catch (e) { /* ¯\_(ツ)_/¯ */ }
 	</script>
 </html>{{end}}

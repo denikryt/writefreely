@@ -5,6 +5,7 @@
 		<title>{{if .Editing}}Editing {{if .Post.Title}}{{.Post.Title}}{{else}}{{.Post.Id}}{{end}}{{else}}New Post{{end}} &mdash; {{.SiteName}}</title>
 		
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -222,9 +223,6 @@
 			location.reload();
 		});
 
-		WebFontConfig = {
-			custom: { families: [ 'Lora:400,700:latin' ], urls: [ '/css/fonts.css' ] }
-		};
 		var selectedFont = H.get('{{if .Editing}}draft{{.Post.Id}}font{{else}}padFont{{end}}', '{{.Post.Font}}');
 
 		var doneTyping = function() {
@@ -248,19 +246,6 @@
 				doneTyping();
 			}
 		});
-
-		try {
-		  (function() {
-			var wf=document.createElement('script');
-			wf.src = '/js/webfont.js';
-			wf.type='text/javascript';
-			wf.async='true';
-			var s=document.getElementsByTagName('script')[0];
-			s.parentNode.insertBefore(wf, s);
-		  })();
-		} catch (e) {
-		  // whatevs
-		}
 		</script>
 	</body>
 </html>{{end}}

@@ -9,6 +9,7 @@
 		<link rel="stylesheet" href="/css/lib/mono-blue.min.css">
 		{{end}}
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<link rel="shortcut icon" href="/favicon.ico" />
 		<link rel="canonical" href="{{.Host}}/{{if .SingleUser}}d/{{end}}{{.ID}}" />
@@ -69,20 +70,6 @@
 	{{if .IsPlainText}}<script src="/js/twitter-text.min.js"></script>{{end}}
 	{{end}}
 	<script type="text/javascript">
-	try {
-	  WebFontConfig = {
-		custom: { families: [ 'Lora:400,700:latin'{{if eq .Font "sans"}}, 'Open+Sans:400,700:latin'{{end}} ], urls: [ '/css/fonts.css' ] }
-	  };
-	  (function() {
-		var wf = document.createElement('script');
-		wf.src = '/js/webfont.js';
-		wf.type = 'text/javascript';
-		wf.async = 'true';
-		var s = document.getElementsByTagName('script')[0];
-		s.parentNode.insertBefore(wf, s);
-	  })();
-	} catch (e) { /* ¯\_(ツ)_/¯ */ }
-
 	var posts = localStorage.getItem('posts');
 	if (posts != null) {
 		posts = JSON.parse(posts);
