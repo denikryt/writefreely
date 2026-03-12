@@ -918,9 +918,6 @@ func (db *datastore) UpdateCollection(app *App, c *SubmittedCollection, alias st
 	if c.Title != nil {
 		*c.Title = parse.Truncate(*c.Title, collMaxLengthTitle)
 	}
-	if c.Description != nil {
-		*c.Description = parse.Truncate(*c.Description, collMaxLengthDescription)
-	}
 
 	q := query.NewUpdate().
 		SetStringPtr(c.Title, "title").

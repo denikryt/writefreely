@@ -42,8 +42,7 @@ import (
 const (
 	collAttrLetterReplyTo = "letter_reply_to"
 
-	collMaxLengthTitle       = 255
-	collMaxLengthDescription = 160
+	collMaxLengthTitle = 255
 )
 
 type (
