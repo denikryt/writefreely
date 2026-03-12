@@ -149,6 +149,7 @@ func InitRoutes(apper Apper, r *mux.Router) *mux.Router {
 	apiColls.HandleFunc("/{alias}/categories", handler.AllReader(fetchCollectionCategories)).Methods("GET")
 	apiColls.HandleFunc("/{alias}/categories", handler.All(createCollectionCategory)).Methods("POST")
 	apiColls.HandleFunc("/{alias}/categories/{slug}", handler.AllReader(fetchCollectionCategory)).Methods("GET")
+	apiColls.HandleFunc("/{alias}/categories/{slug}", handler.All(deleteCollectionCategory)).Methods("DELETE")
 	apiColls.HandleFunc("/{alias}/collect", handler.All(addPost)).Methods("POST")
 	apiColls.HandleFunc("/{alias}/pin", handler.All(pinPost)).Methods("POST")
 	apiColls.HandleFunc("/{alias}/unpin", handler.All(pinPost)).Methods("POST")

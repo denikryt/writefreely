@@ -85,6 +85,22 @@ func selectedCategoryMap(categories []Category) map[string]bool {
 	return selected
 }
 
+func collectionOwnerIDForRequest(app *App, r *http.Request, coll *Collection) (int64, error) {
+	userID, err := apiCheckCollectionPermissions(app, r, coll)
+	if err != nil {
+		return -1, err
+	}
+	if userID == -1 {
+		if user := getUserSession(app, r); user != nil {
+			userID = user.ID
+		}
+	}
+	if userID != coll.OwnerID {
+		return -1, ErrForbiddenCollection
+	}
+	return userID, nil
+}
+
 func (ccp CategoryCollectionPage) PrevPageURL(prefix string, n int, tl bool) string {
 	u := fmt.Sprintf("/category/%s", ccp.Category.Slug)
 	if n > 2 {
@@ -145,18 +161,11 @@ func createCollectionCategory(app *App, w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
+	reqJSON := IsJSON(r)
 
-	userID, err := apiCheckCollectionPermissions(app, r, coll)
+	_, err = collectionOwnerIDForRequest(app, r, coll)
 	if err != nil {
 		return err
-	}
-	if userID == -1 {
-		if user := getUserSession(app, r); user != nil {
-			userID = user.ID
-		}
-	}
-	if userID != coll.OwnerID {
-		return ErrForbiddenCollection
 	}
 
 	var submitted SubmittedCategory
@@ -178,7 +187,17 @@ func createCollectionCategory(app *App, w http.ResponseWriter, r *http.Request) 
 
 	category, err := app.db.CreateCategory(coll.ID, &submitted)
 	if err != nil {
+		if !reqJSON {
+			if httpErr, ok := err.(impart.HTTPError); ok {
+				addSessionFlash(app, w, r, httpErr.Message, nil)
+				return impart.HTTPError{Status: http.StatusFound, Message: "/me/c/" + coll.Alias}
+			}
+		}
 		return err
+	}
+	if !reqJSON {
+		addSessionFlash(app, w, r, "Category created!", nil)
+		return impart.HTTPError{Status: http.StatusFound, Message: "/me/c/" + coll.Alias}
 	}
 	return impart.WriteSuccess(w, category, http.StatusCreated)
 }
@@ -189,17 +208,9 @@ func assignPostCategories(app *App, w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-	userID, err := apiCheckCollectionPermissions(app, r, coll)
+	_, err = collectionOwnerIDForRequest(app, r, coll)
 	if err != nil {
 		return err
-	}
-	if userID == -1 {
-		if user := getUserSession(app, r); user != nil {
-			userID = user.ID
-		}
-	}
-	if userID != coll.OwnerID {
-		return ErrForbiddenCollection
 	}
 
 	var payload struct {
@@ -222,6 +233,35 @@ func assignPostCategories(app *App, w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 	return impart.WriteSuccess(w, map[string]bool{"ok": true}, http.StatusOK)
+}
+
+func deleteCollectionCategory(app *App, w http.ResponseWriter, r *http.Request) error {
+	vars := mux.Vars(r)
+	coll, err := app.db.GetCollection(vars["alias"])
+	if err != nil {
+		return err
+	}
+	reqJSON := IsJSON(r)
+
+	if _, err := collectionOwnerIDForRequest(app, r, coll); err != nil {
+		return err
+	}
+
+	if err := app.db.DeleteCategory(coll.ID, vars["slug"]); err != nil {
+		if !reqJSON {
+			if httpErr, ok := err.(impart.HTTPError); ok {
+				addSessionFlash(app, w, r, httpErr.Message, nil)
+				return impart.HTTPError{Status: http.StatusFound, Message: "/me/c/" + coll.Alias}
+			}
+		}
+		return err
+	}
+
+	if !reqJSON {
+		addSessionFlash(app, w, r, "Category deleted!", nil)
+		return impart.HTTPError{Status: http.StatusFound, Message: "/me/c/" + coll.Alias}
+	}
+	return impart.HTTPError{Status: http.StatusNoContent}
 }
 
 func handleViewCategory(app *App, w http.ResponseWriter, r *http.Request) error {
@@ -274,7 +314,7 @@ func handleViewCategory(app *App, w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	if coll.Posts != nil && len(*coll.Posts) == 0 {
+	if coll.Posts != nil && len(*coll.Posts) == 0 && page > 1 {
 		return ErrCollectionPageNotFound
 	}
 

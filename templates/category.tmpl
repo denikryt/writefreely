@@ -57,6 +57,7 @@
 		{{if .Posts}}<section id="wrapper" itemscope itemtype="http://schema.org/Blog">{{else}}<div id="wrapper">{{end}}
 			<h1>{{.Category.Title}}</h1>
 			{{if .Category.Description}}<p class="description">{{.Category.Description}}</p>{{end}}
+			{{if eq .Category.PostCount 0}}<p class="description">There are no posts in this category yet.</p>{{end}}
 			{{template "posts" .}}
 
 		{{if gt .TotalPages 1}}<nav id="paging" class="content-container clearfix">

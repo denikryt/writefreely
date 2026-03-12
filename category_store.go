@@ -37,6 +37,38 @@ func (db *datastore) CreateCategory(collectionID int64, submitted *SubmittedCate
 	return category, nil
 }
 
+func (db *datastore) DeleteCategory(collectionID int64, slug string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var categoryID int64
+	err = tx.QueryRow("SELECT id FROM categories WHERE collection_id = ? AND slug = ?", collectionID, slug).Scan(&categoryID)
+	switch {
+	case err == sql.ErrNoRows:
+		return ErrCollectionPageNotFound
+	case err != nil:
+		return err
+	}
+
+	if _, err = tx.Exec("DELETE FROM post_categories WHERE category_id = ?", categoryID); err != nil {
+		return err
+	}
+
+	res, err := tx.Exec("DELETE FROM categories WHERE id = ?", categoryID)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrCollectionPageNotFound
+	}
+
+	return tx.Commit()
+}
+
 func (db *datastore) GetCategoriesByCollection(collectionID int64) ([]Category, error) {
 	rows, err := db.Query(`SELECT c.id, c.collection_id, c.slug, c.title, c.description, COUNT(pc.post_id) AS post_count
 		FROM categories c
