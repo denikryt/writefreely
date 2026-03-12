@@ -98,7 +98,7 @@ type (
 		Language      converter.NullJSONString `json:"lang" schema:"lang"`
 		Created       *string                  `json:"created" schema:"created"`
 		Categories    []string                 `json:"categories" schema:"categories"`
-		CategoriesSet bool                     `json:"-" schema:"categories_set"`
+		CategoriesSet bool                     `json:"categories_set" schema:"categories_set"`
 	}
 
 	// Post represents a post as found in the database.
@@ -706,6 +706,7 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	reqJSON := IsJSON(r)
 	vars := mux.Vars(r)
 	postID := vars["post"]
+	collectionAlias := vars["alias"]
 
 	p := AuthenticatedPost{ID: postID}
 	var err error
@@ -732,6 +733,7 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 			log.Error("Couldn't decode post update form request: %v\n", err)
 			return ErrBadFormData
 		}
+		_, p.CategoriesSet = r.PostForm["categories_set"]
 	}
 
 	if p.Web {
@@ -792,6 +794,19 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if collectionAlias != "" {
+		coll, collErr := app.db.GetCollection(collectionAlias)
+		if collErr != nil {
+			return collErr
+		}
+		if coll.OwnerID != userID {
+			return ErrForbiddenCollection
+		}
+		if _, collErr = app.db.Exec("UPDATE posts SET collection_id = ? WHERE id = ? AND owner_id = ? AND collection_id IS NULL", coll.ID, p.ID, userID); collErr != nil {
+			return collErr
+		}
+	}
+
 	var pRes *PublicPost
 	pRes, err = app.db.GetPost(p.ID, 0)
 	if reqJSON {
@@ -816,18 +831,21 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	addSessionFlash(app, w, r, "Changes saved.", nil)
-	collectionAlias := vars["alias"]
 	redirect := "/" + postID + "/meta"
-	if collectionAlias != "" {
+	if pRes.CollectionID.Valid && pRes.Slug.Valid {
 		collPre := "/" + collectionAlias
+		if collectionAlias == "" {
+			if coll, collErr := app.db.GetCollectionBy("id = ?", pRes.CollectionID.Int64); collErr == nil {
+				collectionAlias = coll.Alias
+				collPre = "/" + collectionAlias
+			}
+		}
 		if app.cfg.App.SingleUser {
 			collPre = ""
 		}
 		redirect = collPre + "/" + pRes.Slug.String + "/edit/meta"
-	} else {
-		if app.cfg.App.SingleUser {
-			redirect = "/d" + redirect
-		}
+	} else if app.cfg.App.SingleUser {
+		redirect = "/d" + redirect
 	}
 	w.Header().Set("Location", redirect)
 	w.WriteHeader(http.StatusFound)
@@ -1395,12 +1413,14 @@ func (p *SubmittedPost) isFontValid() bool {
 
 func getRawPost(app *App, friendlyID string) *RawPost {
 	var content, font, title string
+	var slug sql.NullString
 	var isRTL sql.NullBool
 	var lang sql.NullString
 	var ownerID sql.NullInt64
+	var collectionID sql.NullInt64
 	var created, updated time.Time
 
-	err := app.db.QueryRow("SELECT title, content, text_appearance, language, rtl, created, updated, owner_id FROM posts WHERE id = ?", friendlyID).Scan(&title, &content, &font, &lang, &isRTL, &created, &updated, &ownerID)
+	err := app.db.QueryRow("SELECT slug, title, content, text_appearance, language, rtl, created, updated, owner_id, collection_id FROM posts WHERE id = ?", friendlyID).Scan(&slug, &title, &content, &font, &lang, &isRTL, &created, &updated, &ownerID, &collectionID)
 	switch {
 	case err == sql.ErrNoRows:
 		return &RawPost{Content: "", Found: false, Gone: false}
@@ -1410,6 +1430,7 @@ func getRawPost(app *App, friendlyID string) *RawPost {
 	}
 
 	post := &RawPost{
+		Slug:     slug.String,
 		Title:    title,
 		Content:  content,
 		Font:     font,
@@ -1418,6 +1439,7 @@ func getRawPost(app *App, friendlyID string) *RawPost {
 		IsRTL:    isRTL,
 		Language: lang,
 		OwnerID:  ownerID.Int64,
+		CollectionID: collectionID,
 		Found:    true,
 		Gone:     content == "" && title == "",
 	}

@@ -207,9 +207,9 @@ textarea.section.norm {
 			<ul id="category-errors" class="errors"></ul>
 
 			<div id="category-form" style="margin-top:1em;">
-				<p><input type="text" name="title" id="category-title" placeholder="Category title" maxlength="255" style="width:100%" /></p>
-				<p><input type="text" name="slug" id="category-slug" placeholder="category-slug (optional)" maxlength="100" style="width:100%" /></p>
-				<p><textarea name="description" id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
+				<p><input type="text" id="category-title" placeholder="Category title" maxlength="255" style="width:100%" /></p>
+				<p><input type="text" id="category-slug" placeholder="category-slug (optional)" maxlength="100" style="width:100%" /></p>
+				<p><textarea id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
 				<p class="explain">If slug is empty, it will be generated from the title.</p>
 				<p><input type="button" id="create-category" value="Create category" onclick="createCategory()" /></p>
 			</div>

@@ -161,6 +161,14 @@ func handleViewPad(app *App, w http.ResponseWriter, r *http.Request) error {
 		appData.Post = getRawPost(app, action)
 		appData.Post.Id = action
 		appData.SelectedCategorySlugs = mustSelectedCategorySlugsJSON(appData.Post.Categories)
+		if app.cfg.App.SingleUser {
+			appData.EditCollection, err = app.db.GetCollectionByID(1)
+			if err != nil {
+				return err
+			}
+			appData.EditCollection.hostName = app.cfg.App.Host
+			appData.AvailableCategories, _ = app.db.GetCategoriesByCollection(appData.EditCollection.ID)
+		}
 	}
 
 	if appData.Post.Gone {
@@ -227,6 +235,15 @@ func handleViewMeta(app *App, w http.ResponseWriter, r *http.Request) error {
 		// Editing a floating article
 		appData.Post = getRawPost(app, action)
 		appData.Post.Id = action
+		if app.cfg.App.SingleUser {
+			appData.EditCollection, err = app.db.GetCollectionByID(1)
+			if err != nil {
+				return err
+			}
+			appData.EditCollection.hostName = app.cfg.App.Host
+			appData.AvailableCategories, _ = app.db.GetCategoriesByCollection(appData.EditCollection.ID)
+			appData.SelectedCategories = selectedCategoryMap(appData.Post.Categories)
+		}
 	}
 	appData.NeedsToken = appData.User == nil || appData.User.ID != appData.Post.OwnerID
 

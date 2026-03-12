@@ -795,6 +795,7 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) error {
 	params := []interface{}{}
 	var queryUpdates, sep, authCondition string
+	wantsSlug := post.Slug != nil && *post.Slug != ""
 	if post.Slug != nil && *post.Slug != "" {
 		queryUpdates += sep + "slug = ?"
 		sep = ", "
@@ -848,6 +849,30 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 
 	queryUpdates += sep + "updated = " + db.now()
 
+	var inferredCollectionID int64
+	if wantsSlug || post.CategoriesSet {
+		var collID sql.NullInt64
+		err := db.QueryRow("SELECT collection_id FROM posts WHERE id = ? AND owner_id = ?", post.ID, userID).Scan(&collID)
+		switch {
+		case err == sql.ErrNoRows:
+			return ErrUnauthorizedEditPost
+		case err != nil:
+			return err
+		}
+		if !collID.Valid || collID.Int64 == 0 {
+			var collCount int64
+			err = db.QueryRow("SELECT COUNT(*), COALESCE(MIN(id), 0) FROM collections WHERE owner_id = ?", userID).Scan(&collCount, &inferredCollectionID)
+			if err != nil {
+				return err
+			}
+			if collCount == 1 && inferredCollectionID != 0 {
+				queryUpdates += sep + "collection_id = ?"
+				sep = ", "
+				params = append(params, inferredCollectionID)
+			}
+		}
+	}
+
 	res, err := db.Exec("UPDATE posts SET "+queryUpdates+" WHERE id = ? AND "+authCondition, params...)
 	if err != nil {
 		log.Error("Unable to update owned post: %v", err)
@@ -869,7 +894,7 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 	}
 
 	if post.CategoriesSet {
-		var collID int64
+		var collID sql.NullInt64
 		err := db.QueryRow("SELECT collection_id FROM posts WHERE id = ? AND owner_id = ?", post.ID, userID).Scan(&collID)
 		switch {
 		case err == sql.ErrNoRows:
@@ -877,10 +902,13 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 		case err != nil:
 			return err
 		}
-		if collID == 0 {
-			return impart.HTTPError{Status: http.StatusBadRequest, Message: "Only collection posts can be assigned to categories."}
+		if !collID.Valid || collID.Int64 == 0 {
+			if inferredCollectionID == 0 {
+				return impart.HTTPError{Status: http.StatusBadRequest, Message: "Only collection posts can be assigned to categories."}
+			}
+			collID = sql.NullInt64{Int64: inferredCollectionID, Valid: true}
 		}
-		if err := db.AssignPostCategories(post.ID, collID, post.Categories); err != nil {
+		if err := db.AssignPostCategories(post.ID, collID.Int64, post.Categories); err != nil {
 			return err
 		}
 	}
