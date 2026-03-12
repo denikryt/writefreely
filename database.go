@@ -836,13 +836,6 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 		sep = ", "
 		params = append(params, createTime)
 	}
-	// WHERE parameters...
-	// id = ?
-	params = append(params, post.ID)
-	// AND owner_id = ?
-	authCondition = "(owner_id = ?)"
-	params = append(params, userID)
-
 	if queryUpdates == "" {
 		return ErrPostNoUpdatableVals
 	}
@@ -872,6 +865,13 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 			}
 		}
 	}
+
+	// WHERE parameters...
+	// id = ?
+	params = append(params, post.ID)
+	// AND owner_id = ?
+	authCondition = "(owner_id = ?)"
+	params = append(params, userID)
 
 	res, err := db.Exec("UPDATE posts SET "+queryUpdates+" WHERE id = ? AND "+authCondition, params...)
 	if err != nil {

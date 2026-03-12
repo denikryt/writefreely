@@ -712,13 +712,18 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	var err error
 
 	if reqJSON {
-		// Decode JSON request
+		var req struct {
+			Web bool `json:"web"`
+			SubmittedPost
+		}
 		decoder := json.NewDecoder(r.Body)
-		err = decoder.Decode(&p)
+		err = decoder.Decode(&req)
 		if err != nil {
 			log.Error("Couldn't parse post update JSON request: %v\n", err)
 			return ErrBadJSON
 		}
+		p.Web = req.Web
+		p.SubmittedPost = &req.SubmittedPost
 	} else {
 		err = r.ParseForm()
 		if err != nil {
@@ -726,13 +731,17 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 			return ErrBadFormData
 		}
 
-		// Can't decode to a nil SubmittedPost property, so create instance now
-		p.SubmittedPost = &SubmittedPost{}
-		err = app.formDecoder.Decode(&p, r.PostForm)
+		var req struct {
+			Web bool `schema:"web"`
+			SubmittedPost
+		}
+		err = app.formDecoder.Decode(&req, r.PostForm)
 		if err != nil {
 			log.Error("Couldn't decode post update form request: %v\n", err)
 			return ErrBadFormData
 		}
+		p.Web = req.Web
+		p.SubmittedPost = &req.SubmittedPost
 		_, p.CategoriesSet = r.PostForm["categories_set"]
 	}
 
