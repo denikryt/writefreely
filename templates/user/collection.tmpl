@@ -26,6 +26,18 @@ textarea.section.norm {
 	gap: 0.5em;
 	flex-shrink: 0;
 }
+#categories-list .category-actions button {
+	min-width: 5.75em;
+	text-align: center;
+}
+#categories-list .category-actions .edit-action {
+	border: 1px solid #999;
+	color: inherit;
+	background: transparent;
+}
+#categories-list .category-actions .edit-action:hover {
+	background: #f5f5f5;
+}
 #categories-list .category-meta {
 	font-size: 0.9em;
 	line-height: 1.5;
@@ -242,7 +254,7 @@ textarea.section.norm {
 						<p class="explain"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
 					</div>
 					<div class="category-actions">
-						<button type="button" onclick="editCategory('{{.Slug}}')">Edit</button>
+						<button type="button" class="edit-action" onclick="editCategory('{{.Slug}}')">Edit</button>
 						<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
 					</div>
 				</li>
