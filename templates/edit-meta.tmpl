@@ -45,7 +45,7 @@
 				</ul></nav>
 			</div>
 			<div id="belt">
-				<div class="tool if-room"><a href="{{if .EditCollection}}{{.EditCollection.CanonicalURL}}{{.Post.Slug}}/edit{{else}}/{{.Post.Id}}/edit{{end}}" title="Edit post" id="edit"><img class="ic-24dp" src="/img/ic_edit_dark@2x.png" /></a></div>
+				<div class="tool if-room"><a href="{{if .EditCollection}}{{.EditCollection.CanonicalURL}}{{.Post.Slug}}/edit{{else}}/{{if .SingleUser}}d/{{end}}{{.Post.Id}}/edit{{end}}" title="Edit post" id="edit"><img class="ic-24dp" src="/img/ic_edit_dark@2x.png" /></a></div>
 				<div class="tool if-room room-2"><a href="#theme" title="Toggle theme" id="toggle-theme"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a></div>
 				<div class="tool if-room room-1"><a href="/me/posts/" title="View posts" id="view-posts"><img class="ic-24dp" src="/img/ic_list_dark@2x.png" /></a></div>
 			</div>
@@ -261,7 +261,7 @@
 						<input type="text" id="created" name="created" value="{{.Post.UserFacingCreated}}" data-time="{{.Post.Created8601}}" placeholder="YYYY-MM-DD HH:MM:SS" maxlength="19" /> <span id="tz">UTC</span> <a href="#" id="set-now">now</a>
 						<p class="error" id="create-error">Date format should be: <span class="mono"><abbr title="The full year">YYYY</abbr>-<abbr title="The numeric month of the year, where January = 1, with a zero in front if less than 10">MM</abbr>-<abbr title="The day of the month, with a zero in front if less than 10">DD</abbr> <abbr title="The hour (00-23), with a zero in front if less than 10.">HH</abbr>:<abbr title="The minute of the hour (00-59), with a zero in front if less than 10.">MM</abbr>:<abbr title="The seconds (00-59), with a zero in front if less than 10.">SS</abbr></span></p>
 					</dd>
-					{{if .EditCollection}}
+					{{if or .EditCollection .SingleUser}}
 					<dt><label for="tags">Tags</label></dt>
 					<dd><input type="text" id="tags" name="tags" value="{{.Post.Tags}}" placeholder="linux, fediverse, blender" /></dd>
 					{{end}}

@@ -91,6 +91,30 @@ func (db *datastore) loadPostTags(p *Post) error {
 	return nil
 }
 
+func (db *datastore) getSingleOwnerCollectionID(tx *sql.Tx, ownerID int64) (int64, error) {
+	rows, err := tx.Query("SELECT id FROM collections WHERE owner_id = ? ORDER BY id ASC LIMIT 2", ownerID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	collectionIDs := []int64{}
+	for rows.Next() {
+		var collectionID int64
+		if err = rows.Scan(&collectionID); err != nil {
+			return 0, err
+		}
+		collectionIDs = append(collectionIDs, collectionID)
+	}
+	if err = rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(collectionIDs) == 1 {
+		return collectionIDs[0], nil
+	}
+	return 0, nil
+}
+
 func (db *datastore) AssignPostTags(postID string, collectionID int64, tags []string) error {
 	tx, err := db.Begin()
 	if err != nil {

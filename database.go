@@ -764,7 +764,15 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 			return nil, handleFailedPostInsert(err)
 		}
 	}
-	if err = db.assignPostTagsTx(tx, friendlyID, collID, normalizePostTags(post.Tags)); err != nil {
+	tagCollectionID := collID
+	if tagCollectionID <= 0 && post.Tags != nil {
+		tagCollectionID, err = db.getSingleOwnerCollectionID(tx, userID)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+	if err = db.assignPostTagsTx(tx, friendlyID, tagCollectionID, normalizePostTags(post.Tags)); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -877,7 +885,15 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 	}
 
 	if shouldUpdateTags {
-		if err = db.assignPostTagsTx(tx, post.ID, collectionID.Int64, normalizePostTags(post.Tags)); err != nil {
+		tagCollectionID := collectionID.Int64
+		if !collectionID.Valid || tagCollectionID <= 0 {
+			tagCollectionID, err = db.getSingleOwnerCollectionID(tx, userID)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+		if err = db.assignPostTagsTx(tx, post.ID, tagCollectionID, normalizePostTags(post.Tags)); err != nil {
 			tx.Rollback()
 			return err
 		}
