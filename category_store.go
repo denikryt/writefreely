@@ -34,9 +34,13 @@ func scanCategory(scanner categoryRowScanner, withPostCount bool, slug string) (
 	var id, collID int64
 	var title, description string
 	if withPostCount {
+		var rowSlug string
 		var postCount int64
-		if err := scanner.Scan(&id, &collID, &title, &description, &postCount); err != nil {
+		if err := scanner.Scan(&id, &collID, &rowSlug, &title, &description, &postCount); err != nil {
 			return nil, err
+		}
+		if slug == "" {
+			slug = rowSlug
 		}
 		category := hydrateCategory(id, collID, postCount, slug, title, description)
 		return &category, nil
@@ -162,11 +166,11 @@ func (db *datastore) GetCategoriesByCollection(collectionID int64) ([]Category, 
 }
 
 func (db *datastore) GetCategoryBySlug(collectionID int64, slug string) (*Category, error) {
-	category, err := scanCategory(db.QueryRow(`SELECT c.id, c.collection_id, c.title, c.description, COUNT(pc.post_id) AS post_count
+	category, err := scanCategory(db.QueryRow(`SELECT c.id, c.collection_id, c.slug, c.title, c.description, COUNT(pc.post_id) AS post_count
 		FROM categories c
 		LEFT JOIN post_categories pc ON pc.category_id = c.id
 		WHERE c.collection_id = ? AND c.slug = ?
-		GROUP BY c.id, c.collection_id, c.title, c.description`, collectionID, slug), true, slug)
+		GROUP BY c.id, c.collection_id, c.slug, c.title, c.description`, collectionID, slug), true, slug)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, ErrCollectionPageNotFound
