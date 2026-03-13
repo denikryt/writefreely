@@ -1,6 +1,6 @@
 module github.com/writefreely/writefreely
 
-replace github.com/writeas/web-core => ../web-core
+replace github.com/writeas/web-core => github.com/denikryt/web-core v0.0.0-20260220200703-91ebade091c4
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1 // indirect
