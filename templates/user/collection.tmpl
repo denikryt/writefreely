@@ -20,6 +20,12 @@ textarea.section.norm {
 	gap: 1em;
 	margin: 0 0 1em 0;
 }
+#categories-list .category-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	flex-shrink: 0;
+}
 #categories-list .category-meta {
 	font-size: 0.9em;
 	line-height: 1.5;
@@ -30,13 +36,18 @@ textarea.section.norm {
 #categories-list .category-meta p.explain {
 	margin: 0.25em 0 0 0;
 }
+#categories-list .category-actions button,
 #category-form input[type="button"] {
 	font-size: 0.9em;
+	padding: 0.45em 0.9em;
 }
 #category-form-actions {
 	display: flex;
 	align-items: center;
 	gap: 1em;
+}
+#category-form .explain {
+	font-size: 0.85em;
 }
 #cancel-category-edit {
 	display: none;
@@ -230,8 +241,8 @@ textarea.section.norm {
 						{{if .Description}}<p class="explain">{{.Description}}</p>{{end}}
 						<p class="explain"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
 					</div>
-					<div>
-						<button type="button" onclick="editCategory('{{.Slug}}')">Edit</button>
+					<div class="category-actions">
+						<button type="button" class="cta secondary" onclick="editCategory('{{.Slug}}')">Edit</button>
 						<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
 					</div>
 				</li>
@@ -250,7 +261,7 @@ textarea.section.norm {
 				<p><textarea id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
 				<p class="explain">If slug is empty, it will be generated from the title.</p>
 				<p id="category-form-actions">
-					<input type="button" id="create-category" value="Create category" onclick="submitCategory()" />
+					<input type="button" id="create-category" class="cta" value="Create category" onclick="submitCategory()" />
 					<a id="cancel-category-edit" href="#" onclick="cancelCategoryEdit(); return false;">Cancel</a>
 				</p>
 			</div>
