@@ -1890,6 +1890,26 @@ func (db *datastore) ClaimPosts(cfg *config.Config, userID int64, collAlias stri
 			continue
 		}
 
+		if coll != nil {
+			postTags, tagErr := db.GetPostTags(p.ID)
+			if tagErr != nil {
+				r.Code = http.StatusInternalServerError
+				r.ErrorMessage = "An unknown error occurred."
+				r.ID = p.ID
+				res = append(res, r)
+				log.Error("claimPosts (load tags for post %s): %v", p.ID, tagErr)
+				continue
+			}
+			if err = db.AssignPostTags(p.ID, coll.ID, postTags); err != nil {
+				r.Code = http.StatusInternalServerError
+				r.ErrorMessage = "An unknown error occurred."
+				r.ID = p.ID
+				res = append(res, r)
+				log.Error("claimPosts (assign tags for post %s): %v", p.ID, err)
+				continue
+			}
+		}
+
 		// Get full post information to return
 		var fullPost *PublicPost
 		if p.Token != "" {
