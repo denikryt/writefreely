@@ -195,7 +195,7 @@
 				font: font
 			};
 
-			{{ if .Post.Slug }}
+			{{ if and .EditCollection .Post.Slug .Post.CollectionID.Valid }}
 			var url = "/api/collections/{{.EditCollection.Alias}}/posts/{{.Post.Id}}";
 			{{ else if .Post.Id }}
 			var url = "/api/posts/{{.Post.Id}}";
@@ -263,7 +263,7 @@
 							H.set(draftDoc, '');
 						}
 
-						{{if .EditCollection}}
+						{{if and .EditCollection .Post.Slug .Post.CollectionID.Valid}}
 						window.location = '{{.EditCollection.CanonicalURL}}{{.Post.Slug}}';
 						{{else}}
 						window.location = nextURL;

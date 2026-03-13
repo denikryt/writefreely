@@ -8,6 +8,63 @@ textarea.section.norm {
 	max-height: 20em;
 	resize: vertical;
 }
+#categories-list {
+	list-style: none;
+	margin: 0 0 1.5em 0;
+	padding: 0;
+}
+#categories-list li {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1em;
+	margin: 0 0 1em 0;
+}
+#categories-list .category-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	flex-shrink: 0;
+}
+#categories-list .category-actions button {
+	min-width: 5.75em;
+	text-align: center;
+}
+#categories-list .category-actions .edit-action {
+	border: 1px solid #999;
+	color: inherit;
+	background: transparent;
+}
+#categories-list .category-actions .edit-action:hover {
+	background: #f5f5f5;
+}
+#categories-list .category-meta {
+	font-size: 0.9em;
+	line-height: 1.5;
+}
+#categories-list .category-meta code {
+	font-size: 0.9em;
+}
+#categories-list .category-meta p.explain {
+	margin: 0.25em 0 0 0;
+}
+#categories-list .category-actions button,
+#category-form input[type="button"] {
+	font-size: 0.9em;
+	padding: 0.45em 0.9em;
+}
+#category-form-actions {
+	display: flex;
+	align-items: center;
+	gap: 1em;
+}
+#category-form .explain {
+	font-size: 0.85em;
+}
+#cancel-category-edit {
+	display: none;
+	font-size: 0.9em;
+}
 @media (pointer: coarse) {
 	.codable {
 		font-size: 0.75em !important;
@@ -188,15 +245,18 @@ textarea.section.norm {
 		<div class="section">
 			<p class="explain">Create internal collections for this blog and use them to group related posts.</p>
 			{{if .Categories}}
-			<ul id="categories-list" style="list-style:none; margin:0 0 1.5em 0; padding:0;">
+			<ul id="categories-list">
 				{{range .Categories}}
-				<li id="category-{{.Slug}}" style="display:flex; align-items:flex-start; justify-content:space-between; gap:1em; margin:0 0 1em 0;">
-					<div>
+				<li id="category-{{.Slug}}" data-category-title="{{.Title}}" data-category-slug="{{.Slug}}" data-category-description="{{.Description}}">
+					<div class="category-meta">
 						<div><strong>{{.Title}}</strong> <code>/category/{{.Slug}}</code></div>
-						{{if .Description}}<p class="explain" style="margin:0.25em 0 0 0;">{{.Description}}</p>{{end}}
-						<p class="explain" style="margin:0.25em 0 0 0;"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
+						{{if .Description}}<p class="explain">{{.Description}}</p>{{end}}
+						<p class="explain"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
 					</div>
-					<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
+					<div class="category-actions">
+						<button type="button" class="edit-action" onclick="editCategory('{{.Slug}}')">Edit</button>
+						<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
+					</div>
 				</li>
 				{{end}}
 			</ul>
@@ -207,11 +267,15 @@ textarea.section.norm {
 			<ul id="category-errors" class="errors"></ul>
 
 			<div id="category-form" style="margin-top:1em;">
+				<input type="hidden" id="category-current-slug" value="" />
 				<p><input type="text" id="category-title" placeholder="Category title" maxlength="255" style="width:100%" /></p>
 				<p><input type="text" id="category-slug" placeholder="category-slug (optional)" maxlength="100" style="width:100%" /></p>
 				<p><textarea id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
 				<p class="explain">If slug is empty, it will be generated from the title.</p>
-				<p><input type="button" id="create-category" value="Create category" onclick="createCategory()" /></p>
+				<p id="category-form-actions">
+					<input type="button" id="create-category" class="cta" value="Create category" onclick="submitCategory()" />
+					<a id="cancel-category-edit" href="#" onclick="cancelCategoryEdit(); return false;">Cancel</a>
+				</p>
 			</div>
 		</div>
 	</div>
@@ -319,19 +383,53 @@ function promptDelete() {
 	showModal("delete");
 }
 
-function createCategory() {
+function resetCategoryForm() {
+	document.getElementById('category-current-slug').value = '';
+	document.getElementById('category-title').value = '';
+	document.getElementById('category-slug').value = '';
+	document.getElementById('category-description').value = '';
+	document.getElementById('create-category').value = 'Create category';
+	document.getElementById('cancel-category-edit').style.display = 'none';
+}
+
+function editCategory(slug) {
+	var row = document.getElementById('category-' + slug);
+	if (!row) {
+		return;
+	}
+	document.getElementById('category-errors').innerHTML = '';
+	document.getElementById('category-current-slug').value = row.dataset.categorySlug || '';
+	document.getElementById('category-title').value = row.dataset.categoryTitle || '';
+	document.getElementById('category-slug').value = row.dataset.categorySlug || '';
+	document.getElementById('category-description').value = row.dataset.categoryDescription || '';
+	document.getElementById('create-category').value = 'Save category';
+	document.getElementById('cancel-category-edit').style.display = 'inline';
+	document.getElementById('category-title').focus();
+}
+
+function cancelCategoryEdit() {
+	document.getElementById('category-errors').innerHTML = '';
+	resetCategoryForm();
+}
+
+function submitCategory() {
 	var title = document.getElementById('category-title').value;
 	var slug = document.getElementById('category-slug').value;
 	var description = document.getElementById('category-description').value;
+	var currentSlug = document.getElementById('category-current-slug').value;
 	var button = document.getElementById('create-category');
 	document.getElementById('category-errors').innerHTML = '';
 
 	button.disabled = true;
-	button.value = 'Creating...';
+	button.value = currentSlug ? 'Saving...' : 'Creating...';
 
 	var http = new XMLHttpRequest();
 	var url = "/api/collections/{{.Alias}}/categories";
-	http.open("POST", url, true);
+	var method = "POST";
+	if (currentSlug) {
+		url += "/" + encodeURIComponent(currentSlug);
+	}
+	http.open(method, url, true);
 	http.setRequestHeader("Content-type", "application/json");
 	http.onreadystatechange = function() {
 		if (http.readyState == 4) {
@@ -343,7 +441,7 @@ function createCategory() {
 				var data = JSON.parse(http.responseText);
 				document.getElementById('category-errors').innerHTML = '<li class="urgent">' + data.error_msg + '</li>';
 				button.disabled = false;
-				button.value = 'Create category';
+				button.value = currentSlug ? 'Save category' : 'Create category';
 			}
 		}
 	};

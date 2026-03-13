@@ -11,6 +11,14 @@ import (
 	"github.com/writefreely/writefreely/config"
 )
 
+type categoryRowScanner interface {
+	Scan(dest ...interface{}) error
+}
+
+type categoryRowQuerier interface {
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
 func sqlPlaceholders(n int) string {
 	if n <= 0 {
 		return ""
@@ -20,6 +28,53 @@ func sqlPlaceholders(n int) string {
 		parts[i] = "?"
 	}
 	return strings.Join(parts, ",")
+}
+
+func scanCategory(scanner categoryRowScanner, withPostCount bool, slug string) (*Category, error) {
+	var id, collID int64
+	var title, description string
+	if withPostCount {
+		var rowSlug string
+		var postCount int64
+		if err := scanner.Scan(&id, &collID, &rowSlug, &title, &description, &postCount); err != nil {
+			return nil, err
+		}
+		if slug == "" {
+			slug = rowSlug
+		}
+		category := hydrateCategory(id, collID, postCount, slug, title, description)
+		return &category, nil
+	}
+	if err := scanner.Scan(&id, &collID, &slug, &title, &description); err != nil {
+		return nil, err
+	}
+	category := hydrateCategory(id, collID, 0, slug, title, description)
+	return &category, nil
+}
+
+func scanCategoryList(rows *sql.Rows, withPostCount bool) ([]Category, error) {
+	categories := []Category{}
+	for rows.Next() {
+		category, err := scanCategory(rows, withPostCount, "")
+		if err != nil {
+			return nil, err
+		}
+		categories = append(categories, *category)
+	}
+	return categories, rows.Err()
+}
+
+func findCategoryID(q categoryRowQuerier, collectionID int64, slug string) (int64, error) {
+	var categoryID int64
+	err := q.QueryRow("SELECT id FROM categories WHERE collection_id = ? AND slug = ?", collectionID, slug).Scan(&categoryID)
+	switch {
+	case err == sql.ErrNoRows:
+		return 0, ErrCollectionPageNotFound
+	case err != nil:
+		return 0, err
+	default:
+		return categoryID, nil
+	}
 }
 
 func (db *datastore) CreateCategory(collectionID int64, submitted *SubmittedCategory) (*Category, error) {
@@ -37,6 +92,36 @@ func (db *datastore) CreateCategory(collectionID int64, submitted *SubmittedCate
 	return category, nil
 }
 
+func (db *datastore) UpdateCategory(collectionID int64, currentSlug string, submitted *SubmittedCategory) (*Category, error) {
+	if strings.TrimSpace(submitted.Title) == "" {
+		return nil, impart.HTTPError{Status: http.StatusBadRequest, Message: "Category title is required."}
+	}
+
+	existingID, err := findCategoryID(db, collectionID, currentSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	category := newCategoryFromSubmitted(collectionID, submitted)
+	res, err := db.Exec("UPDATE categories SET slug = ?, title = ?, description = ? WHERE id = ?", category.Slug, category.Title, category.Description, existingID)
+	if err != nil {
+		if db.isDuplicateKeyErr(err) {
+			return nil, impart.HTTPError{Status: http.StatusConflict, Message: "Category slug already exists on this blog."}
+		}
+		return nil, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return nil, ErrCollectionPageNotFound
+	}
+
+	updated, err := db.GetCategoryBySlug(collectionID, category.Slug)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 func (db *datastore) DeleteCategory(collectionID int64, slug string) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -44,12 +129,8 @@ func (db *datastore) DeleteCategory(collectionID int64, slug string) error {
 	}
 	defer tx.Rollback()
 
-	var categoryID int64
-	err = tx.QueryRow("SELECT id FROM categories WHERE collection_id = ? AND slug = ?", collectionID, slug).Scan(&categoryID)
-	switch {
-	case err == sql.ErrNoRows:
-		return ErrCollectionPageNotFound
-	case err != nil:
+	categoryID, err := findCategoryID(tx, collectionID, slug)
+	if err != nil {
 		return err
 	}
 
@@ -81,35 +162,22 @@ func (db *datastore) GetCategoriesByCollection(collectionID int64) ([]Category, 
 	}
 	defer rows.Close()
 
-	categories := []Category{}
-	for rows.Next() {
-		var id, collID, postCount int64
-		var slug, title, description string
-		if err := rows.Scan(&id, &collID, &slug, &title, &description, &postCount); err != nil {
-			return nil, err
-		}
-		categories = append(categories, hydrateCategory(id, collID, postCount, slug, title, description))
-	}
-	return categories, rows.Err()
+	return scanCategoryList(rows, true)
 }
 
 func (db *datastore) GetCategoryBySlug(collectionID int64, slug string) (*Category, error) {
-	var id, collID, postCount int64
-	var title, description string
-	err := db.QueryRow(`SELECT c.id, c.collection_id, c.title, c.description, COUNT(pc.post_id) AS post_count
+	category, err := scanCategory(db.QueryRow(`SELECT c.id, c.collection_id, c.slug, c.title, c.description, COUNT(pc.post_id) AS post_count
 		FROM categories c
 		LEFT JOIN post_categories pc ON pc.category_id = c.id
 		WHERE c.collection_id = ? AND c.slug = ?
-		GROUP BY c.id, c.collection_id, c.title, c.description`, collectionID, slug).
-		Scan(&id, &collID, &title, &description, &postCount)
+		GROUP BY c.id, c.collection_id, c.slug, c.title, c.description`, collectionID, slug), true, slug)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, ErrCollectionPageNotFound
 	case err != nil:
 		return nil, err
 	}
-	category := hydrateCategory(id, collID, postCount, slug, title, description)
-	return &category, nil
+	return category, nil
 }
 
 func (db *datastore) GetPostCategories(postID string) ([]Category, error) {
@@ -123,16 +191,7 @@ func (db *datastore) GetPostCategories(postID string) ([]Category, error) {
 	}
 	defer rows.Close()
 
-	categories := []Category{}
-	for rows.Next() {
-		var id, collID int64
-		var slug, title, description string
-		if err := rows.Scan(&id, &collID, &slug, &title, &description); err != nil {
-			return nil, err
-		}
-		categories = append(categories, hydrateCategory(id, collID, 0, slug, title, description))
-	}
-	return categories, rows.Err()
+	return scanCategoryList(rows, false)
 }
 
 func (db *datastore) attachPostCategories(posts ...*Post) {
