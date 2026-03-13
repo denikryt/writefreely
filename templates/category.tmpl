@@ -32,6 +32,16 @@
 		<meta property="og:image" content="{{.Collection.AvatarURL}}">
 		{{template "collection-meta" .}}
 		{{if .Collection.StyleSheet}}<style type="text/css">{{.Collection.StyleSheetDisplay}}</style>{{end}}
+		<style type="text/css">
+			#subpage #wrapper .category-description {
+				max-width: 40rem;
+				margin: 0.6em auto 1.8em;
+				padding: 0 1.5rem;
+				box-sizing: border-box;
+				font-size: 1em;
+				line-height: 1.5;
+			}
+		</style>
 
 		{{if .Collection.RenderMathJax}}
 		  {{template "mathjax" .}}
@@ -56,7 +66,7 @@
 		{{end}}
 		{{if .Posts}}<section id="wrapper" itemscope itemtype="http://schema.org/Blog">{{else}}<div id="wrapper">{{end}}
 			<h1>{{.Category.Title}}</h1>
-			{{if .Category.Description}}<p class="description">{{.Category.Description}}</p>{{end}}
+			{{if .Category.Description}}<p class="description category-description">{{.Category.Description}}</p>{{end}}
 			{{if eq .Category.PostCount 0}}<p class="description">There are no posts in this category yet.</p>{{end}}
 			{{template "posts" .}}
 
