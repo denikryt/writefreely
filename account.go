@@ -879,7 +879,8 @@ func viewEditCollection(app *App, u *User, w http.ResponseWriter, r *http.Reques
 	obj := struct {
 		*UserPage
 		*Collection
-		Silenced bool
+		Categories []Category
+		Silenced   bool
 
 		config.EmailCfg
 		LetterReplyTo string
@@ -889,6 +890,7 @@ func viewEditCollection(app *App, u *User, w http.ResponseWriter, r *http.Reques
 		Silenced:   silenced,
 		EmailCfg:   app.cfg.Email,
 	}
+	obj.Categories, _ = app.db.GetCategoriesByCollection(c.ID)
 	obj.UserPage.CollAlias = c.Alias
 	if obj.EmailCfg.Enabled() {
 		obj.LetterReplyTo = app.db.GetCollectionAttribute(c.ID, collAttrLetterReplyTo)

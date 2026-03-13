@@ -13,6 +13,7 @@ package writefreely
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/feeds"
@@ -64,8 +65,11 @@ func ViewFeed(app *App, w http.ResponseWriter, req *http.Request) error {
 	}
 
 	tag := mux.Vars(req)["tag"]
+	categorySlug := mux.Vars(req)["slug"]
 	if tag != "" {
 		coll.Posts, _ = app.db.GetPostsTagged(app.cfg, c, tag, 1, false)
+	} else if categorySlug != "" && strings.Contains(req.URL.Path, "/category/") {
+		coll.Posts, _ = app.db.GetPostsByCategory(app.cfg, c, categorySlug, 1, false)
 	} else {
 		coll.Posts, _ = app.db.GetPosts(app.cfg, c, 1, false, true, false, "")
 	}
@@ -78,6 +82,10 @@ func ViewFeed(app *App, w http.ResponseWriter, req *http.Request) error {
 	collectionTitle := coll.DisplayTitle()
 	if tag != "" {
 		collectionTitle = tag + " &mdash; " + collectionTitle
+	} else if categorySlug != "" && strings.Contains(req.URL.Path, "/category/") {
+		if category, err := app.db.GetCategoryBySlug(c.ID, categorySlug); err == nil {
+			collectionTitle = category.Title + " &mdash; " + collectionTitle
+		}
 	}
 
 	baseUrl := coll.CanonicalURL()
@@ -85,6 +93,8 @@ func ViewFeed(app *App, w http.ResponseWriter, req *http.Request) error {
 	siteURL := baseUrl
 	if tag != "" {
 		siteURL += "tag:" + tag
+	} else if categorySlug != "" && strings.Contains(req.URL.Path, "/category/") {
+		siteURL += "category/" + categorySlug
 	}
 
 	feed := &feeds.Feed{

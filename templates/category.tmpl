@@ -1,5 +1,5 @@
-{{define "collection-tags"}}<!DOCTYPE HTML>
-<html class="light">
+{{define "category"}}<!DOCTYPE HTML>
+<html class="light" {{if .Language}}lang="{{.Language}}"{{end}} dir="{{.Direction}}">
 	<head prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
 		<meta charset="utf-8">
 		<script type="text/javascript">
@@ -13,48 +13,54 @@
 			})();
 		</script>
 
-		<title>{{.Tag}} &mdash; {{.Collection.DisplayTitle}}</title>
-		
+		<title>{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}</title>
+
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
 		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<link rel="shortcut icon" href="/favicon.ico" />
-		{{if not .Collection.IsPrivate}}<link rel="alternate" type="application/rss+xml" title="{{.Tag}} posts on {{.DisplayTitle}}" href="{{.CanonicalURL}}tag:{{.Tag}}/feed/" />{{end}}
+		{{if not .Collection.IsPrivate}}<link rel="alternate" type="application/rss+xml" title="{{.Category.Title}} posts on {{.DisplayTitle}}" href="{{.CanonicalURL}}category/{{.Category.Slug}}/feed/" />{{end}}
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<link rel="canonical" href="{{.CanonicalURL}}tag:{{.Tag | tolower}}" />
+		<link rel="canonical" href="{{.CanonicalURL}}category/{{.Category.Slug}}" />
 		<meta name="generator" content="Write.as">
-		<meta name="title" content="{{.Tag}} &mdash; {{.Collection.DisplayTitle}}">
-		<meta name="description" content="{{.Tag}} posts on {{.Collection.DisplayTitle}}">
+		<meta name="title" content="{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}">
+		<meta name="description" content="{{.Category.Title}} posts on {{.Collection.DisplayTitle}}">
 		<meta name="application-name" content="Write.as">
 		<meta name="application-url" content="https://write.as">
 		{{if gt .Views 1}}<meta name="twitter:label1" value="Views">
 		<meta name="twitter:data1" value="{{largeNumFmt .Views}}">{{end}}
 		<meta itemprop="name" content="{{.Collection.DisplayTitle}}">
-		<meta itemprop="description" content="{{.Tag}} posts on {{.Collection.DisplayTitle}}">
+		<meta itemprop="description" content="{{.Category.Title}} posts on {{.Collection.DisplayTitle}}">
 		<meta name="twitter:card" content="summary">
 		<meta name="twitter:site" content="@writeas__">
-		<meta name="twitter:description" content="{{.Tag}} posts on {{.Collection.DisplayTitle}}">
-		<meta name="twitter:title" content="{{.Tag}} &mdash; {{.Collection.DisplayTitle}}">
+		<meta name="twitter:description" content="{{.Category.Title}} posts on {{.Collection.DisplayTitle}}">
+		<meta name="twitter:title" content="{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}">
 		<meta name="twitter:image" content="{{.Collection.AvatarURL}}">
-		<meta property="og:title" content="{{.Tag}} &mdash; {{.Collection.DisplayTitle}}" />
+		<meta property="og:title" content="{{.Category.Title}} &mdash; {{.Collection.DisplayTitle}}" />
 		<meta property="og:site_name" content="{{.DisplayTitle}}" />
 		<meta property="og:type" content="article" />
-		<meta property="og:url" content="{{.CanonicalURL}}tag:{{.Tag}}" />
+		<meta property="og:url" content="{{.CanonicalURL}}category/{{.Category.Slug}}" />
 		<meta property="og:image" content="{{.Collection.AvatarURL}}">
 		{{template "collection-meta" .}}
 		{{if .Collection.StyleSheet}}<style type="text/css">{{.Collection.StyleSheetDisplay}}</style>{{end}}
+		<style type="text/css">
+			#subpage #wrapper .category-description {
+				max-width: 40rem;
+				margin: 0.6em auto 1.8em;
+				padding: 0 1.5rem;
+				box-sizing: border-box;
+				font-size: 1em;
+				line-height: 1.5;
+			}
+		</style>
 
 		{{if .Collection.RenderMathJax}}
-		  <!-- Add mathjax logic -->
 		  {{template "mathjax" .}}
 		{{end}}
 
-		<!-- Add highlighting logic -->
 		{{template "highlighting" . }}
-
 	</head>
 	<body id="subpage">
-		
 		<div id="overlay"></div>
 
 		<header>
@@ -65,12 +71,14 @@
 				{{end}}
 			</nav>
 		</header>
-		
+
 		{{if .Silenced}}
 			{{template "user-silenced"}}
 		{{end}}
 		{{if .Posts}}<section id="wrapper" itemscope itemtype="http://schema.org/Blog">{{else}}<div id="wrapper">{{end}}
-			<h1>{{.Tag}}</h1>
+			<h1>{{.Category.Title}}</h1>
+			{{if .Category.Description}}<p class="description category-description">{{.Category.Description}}</p>{{end}}
+			{{if eq .Category.PostCount 0}}<p class="description">There are no posts in this category yet.</p>{{end}}
 			{{template "posts" .}}
 
 		{{if gt .TotalPages 1}}<nav id="paging" class="content-container clearfix">
@@ -94,7 +102,7 @@
 		</footer>
 		{{ end }}
 	</body>
-	
+
 	{{if .CanShowScript}}
 		{{range .ExternalScripts}}<script type="text/javascript" src="{{.}}" async></script>{{end}}
 		{{if .Collection.Script}}<script type="text/javascript">{{.ScriptDisplay}}</script>{{end}}
@@ -103,9 +111,7 @@
 	{{if .IsOwner}}
 	<script src="/js/h.js"></script>
 	<script src="/js/postactions.js"></script>
-	{{end}}
 	<script type="text/javascript">
-{{if .IsOwner}}
 var deleting = false;
 function delPost(e, id, owned) {
 	e.preventDefault();
@@ -113,14 +119,10 @@ function delPost(e, id, owned) {
 		return;
 	}
 
-	// TODO: UNDO!
 	if (window.confirm('Are you sure you want to delete this post?')) {
-		// AJAX
 		deletePost(id, "", function() {
-			// Remove post from list
 			var $postEl = document.getElementById('post-' + id);
 			$postEl.parentNode.removeChild($postEl);
-			// TODO: add next post from this collection at the bottom
 		});
 	}
 }
@@ -142,12 +144,9 @@ var deletePost = function(postID, token, callback) {
 			} else if (http.status == 409) {
 				$delBtn.innerHTML = 'delete';
 				alert("Post is synced to another account. Delete the post from that account instead.");
-				// TODO: show "remove" button instead of "delete" now
-				// Persist that state.
-				// Have it remove the post locally only.
 			} else {
 				$delBtn.innerHTML = 'delete';
-				alert("Failed to delete." + (http.status>=500?" Please try again.":""));
+				alert("Failed to delete." + (http.status >= 500 ? " Please try again." : ""));
 			}
 		}
 	}
@@ -163,49 +162,40 @@ function pinPost(e, postID, slug, title) {
 	pinning = true;
 
 	var callback = function() {
-		// Visibly remove post from collection
 		var $postEl = document.getElementById('post-' + postID);
 		$postEl.parentNode.removeChild($postEl);
 		var $header = document.getElementsByTagName('header')[0];
 		var $pinnedNavs = $header.getElementsByTagName('nav');
-		// Add link to nav
-		var link = '<a class="pinned" href="{{if not .SingleUser}}/{{.Alias}}/{{end}}'+slug+'">'+title+'</a>';
+		var link = '<a class="pinned" href="{{if not .SingleUser}}/{{.Collection.Alias}}/{{end}}' + slug + '">' + title + '</a>';
 		if ($pinnedNavs.length == 0) {
-			$header.insertAdjacentHTML("beforeend", '<nav>'+link+'</nav>');
+			$header.insertAdjacentHTML("beforeend", '<nav>' + link + '</nav>');
 		} else {
 			$pinnedNavs[0].insertAdjacentHTML("beforeend", link);
 		}
 	};
 
-	var $pinBtn = document.getElementById('post-' + postID).getElementsByClassName('pin action')[0];
+	$pinBtn = document.getElementById('post-' + postID).getElementsByClassName('pin action')[0];
 	$pinBtn.innerHTML = '...';
 
 	var http = new XMLHttpRequest();
-	var url = "/api/collections/{{.Alias}}/pin";
-	var params = [ { "id": postID } ];
+	var url = "/api/collections/{{.Collection.Alias}}/posts/" + postID + "/pin";
 	http.open("POST", url, true);
-	http.setRequestHeader("Content-type", "application/json");
+	http.setRequestHeader('Content-type', 'application/json');
 	http.onreadystatechange = function() {
 		if (http.readyState == 4) {
 			pinning = false;
+			$pinBtn.innerHTML = 'pin';
 			if (http.status == 200) {
 				callback();
-			} else if (http.status == 409) {
-				$pinBtn.innerHTML = 'pin';
-				alert("Post is synced to another account. Delete the post from that account instead.");
-				// TODO: show "remove" button instead of "delete" now
-				// Persist that state.
-				// Have it remove the post locally only.
 			} else {
-				$pinBtn.innerHTML = 'pin';
-				alert("Failed to pin." + (http.status>=500?" Please try again.":""));
+				alert("Failed to pin." + (http.status >= 500 ? " Please try again." : ""));
 			}
 		}
 	}
-	http.send(JSON.stringify(params));
-};
-{{end}}
+	http.send(JSON.stringify({isPinned: true}));
+}
 	</script>
+	{{end}}
 	<a id="global-theme-toggle" class="global-theme-toggle global-theme-toggle--floating" href="#theme" title="Toggle theme" data-theme-toggle="true"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a>
 	<script src="/js/theme.js"></script>
 </html>{{end}}

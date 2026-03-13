@@ -11,6 +11,8 @@
 package writefreely
 
 import (
+	"encoding/json"
+	"html/template"
 	"net/http"
 	"strings"
 
@@ -19,6 +21,56 @@ import (
 	"github.com/writeas/web-core/log"
 	"github.com/writefreely/writefreely/page"
 )
+
+type padPageData struct {
+	page.StaticPage
+	Post                  *RawPost
+	User                  *User
+	Blogs                 *[]Collection
+	Silenced              bool
+	Editing               bool
+	EditCollection        *Collection
+	AvailableCategories   []Category
+	CategoriesByBlogJSON  template.JS
+	SelectedCategorySlugs template.JS
+}
+
+type metaPageData struct {
+	page.StaticPage
+	Post                *RawPost
+	User                *User
+	EditCollection      *Collection
+	Flashes             []string
+	NeedsToken          bool
+	Silenced            bool
+	AvailableCategories []Category
+	SelectedCategories  map[string]bool
+}
+
+func mustCategoriesJSONByBlog(categoriesByBlog map[string][]Category) template.JS {
+	if categoriesByBlog == nil {
+		return template.JS("{}")
+	}
+	b, err := json.Marshal(categoriesByBlog)
+	if err != nil {
+		log.Error("Unable to marshal categories by blog: %v", err)
+		return template.JS("{}")
+	}
+	return template.JS(b)
+}
+
+func mustSelectedCategorySlugsJSON(categories []Category) template.JS {
+	slugs := make([]string, 0, len(categories))
+	for _, category := range categories {
+		slugs = append(slugs, category.Slug)
+	}
+	b, err := json.Marshal(slugs)
+	if err != nil {
+		log.Error("Unable to marshal selected categories: %v", err)
+		return template.JS("[]")
+	}
+	return template.JS(b)
+}
 
 func handleViewPad(app *App, w http.ResponseWriter, r *http.Request) error {
 	vars := mux.Vars(r)
@@ -33,19 +85,12 @@ func handleViewPad(app *App, w http.ResponseWriter, r *http.Request) error {
 		}
 		collAlias = c.Alias
 	}
-	appData := &struct {
-		page.StaticPage
-		Post     *RawPost
-		User     *User
-		Blogs    *[]Collection
-		Silenced bool
-
-		Editing        bool        // True if we're modifying an existing post
-		EditCollection *Collection // Collection of the post we're editing, if any
-	}{
-		StaticPage: pageForReq(app, r),
-		Post:       &RawPost{Font: "norm"},
-		User:       getUserSession(app, r),
+	appData := &padPageData{
+		StaticPage:            pageForReq(app, r),
+		Post:                  &RawPost{Font: "norm"},
+		User:                  getUserSession(app, r),
+		CategoriesByBlogJSON:  template.JS("{}"),
+		SelectedCategorySlugs: template.JS("[]"),
 	}
 	var err error
 	if appData.User != nil {
@@ -60,6 +105,18 @@ func handleViewPad(app *App, w http.ResponseWriter, r *http.Request) error {
 			}
 			log.Error("Unable to get user status for Pad: %v", err)
 		}
+		categoriesByBlog := map[string][]Category{}
+		if appData.Blogs != nil {
+			for _, blog := range *appData.Blogs {
+				categories, catErr := app.db.GetCategoriesByCollection(blog.ID)
+				if catErr != nil {
+					log.Error("Unable to get categories for %s: %v", blog.Alias, catErr)
+					continue
+				}
+				categoriesByBlog[blog.Alias] = categories
+			}
+		}
+		appData.CategoriesByBlogJSON = mustCategoriesJSONByBlog(categoriesByBlog)
 	}
 
 	padTmpl := app.cfg.App.Editor
@@ -97,10 +154,13 @@ func handleViewPad(app *App, w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		appData.EditCollection.hostName = app.cfg.App.Host
+		appData.AvailableCategories, _ = app.db.GetCategoriesByCollection(appData.EditCollection.ID)
+		appData.SelectedCategorySlugs = mustSelectedCategorySlugsJSON(appData.Post.Categories)
 	} else {
 		// Editing a floating article
 		appData.Post = getRawPost(app, action)
 		appData.Post.Id = action
+		appData.SelectedCategorySlugs = mustSelectedCategorySlugsJSON(appData.Post.Categories)
 	}
 
 	if appData.Post.Gone {
@@ -125,18 +185,11 @@ func handleViewMeta(app *App, w http.ResponseWriter, r *http.Request) error {
 	action := vars["action"]
 	slug := vars["slug"]
 	collAlias := vars["collection"]
-	appData := &struct {
-		page.StaticPage
-		Post           *RawPost
-		User           *User
-		EditCollection *Collection // Collection of the post we're editing, if any
-		Flashes        []string
-		NeedsToken     bool
-		Silenced       bool
-	}{
-		StaticPage: pageForReq(app, r),
-		Post:       &RawPost{Font: "norm"},
-		User:       getUserSession(app, r),
+	appData := &metaPageData{
+		StaticPage:         pageForReq(app, r),
+		Post:               &RawPost{Font: "norm"},
+		User:               getUserSession(app, r),
+		SelectedCategories: map[string]bool{},
 	}
 	var err error
 	appData.Silenced, err = app.db.IsUserSilenced(appData.User.ID)
@@ -168,10 +221,21 @@ func handleViewMeta(app *App, w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		appData.EditCollection.hostName = app.cfg.App.Host
+		appData.AvailableCategories, _ = app.db.GetCategoriesByCollection(appData.EditCollection.ID)
+		appData.SelectedCategories = selectedCategoryMap(appData.Post.Categories)
 	} else {
 		// Editing a floating article
 		appData.Post = getRawPost(app, action)
 		appData.Post.Id = action
+		if app.cfg.App.SingleUser {
+			appData.EditCollection, err = app.db.GetCollectionByID(1)
+			if err != nil {
+				return err
+			}
+			appData.EditCollection.hostName = app.cfg.App.Host
+			appData.AvailableCategories, _ = app.db.GetCategoriesByCollection(appData.EditCollection.ID)
+			appData.SelectedCategories = selectedCategoryMap(appData.Post.Categories)
+		}
 	}
 	appData.NeedsToken = appData.User == nil || appData.User.ID != appData.Post.OwnerID
 

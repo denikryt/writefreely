@@ -16,6 +16,7 @@
 		<title>{{.DisplayTitle}}{{if not .SingleUser}} &mdash; {{.SiteName}}{{end}}</title>
 
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<link rel="shortcut icon" href="/favicon.ico" />
 		<link rel="canonical" href="{{.CanonicalURL}}">
@@ -95,6 +96,9 @@
 		{{end}}
 		<h1 dir="{{.Direction}}" id="blog-title">{{if .Posts}}{{else}}<span class="writeas-prefix"><a href="/">write.as</a></span> {{end}}<a href="/{{if .IsTopLevel}}{{else}}{{.Prefix}}{{.Alias}}/{{end}}" class="h-card p-author u-url" rel="me author">{{.DisplayTitle}}</a></h1>
 		{{if .Description}}<p class="description p-note">{{.DisplayDescription}}</p>{{end}}
+		{{if .Categories}}<nav class="collection-categories">
+			{{range .Categories}}<a class="category" href="{{$.CanonicalURL}}category/{{.Slug}}">{{.Title}}</a>{{end}}
+		</nav>{{end}}
 		{{/*if not .Public/*}}
 			<!--p class="meta-note"><span>Private collection</span>. Only you can see this page.</p-->
 		{{/*end*/}}
@@ -253,20 +257,6 @@ function pinPost(e, postID, slug, title) {
 	}
 	http.send(JSON.stringify(params));
 };
-
-	try {
-	  WebFontConfig = {
-		custom: { families: [ 'Lora:400,700:latin', 'Open+Sans:400,700:latin' ], urls: [ '/css/fonts.css' ] }
-	  };
-	  (function() {
-		var wf = document.createElement('script');
-		wf.src = '/js/webfont.js';
-		wf.type = 'text/javascript';
-		wf.async = 'true';
-		var s = document.getElementsByTagName('script')[0];
-		s.parentNode.insertBefore(wf, s);
-	  })();
-	} catch (e) {}
 	</script>
 	<a id="global-theme-toggle" class="global-theme-toggle global-theme-toggle--floating" href="#theme" title="Toggle theme" data-theme-toggle="true"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a>
 	<script src="/js/theme.js"></script>
