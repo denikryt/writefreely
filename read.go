@@ -114,6 +114,11 @@ func (app *App) FetchPublicPosts() (interface{}, error) {
 			c.Monetization = app.db.GetCollectionAttribute(c.ID, "monetization_pointer")
 		}
 
+		err = app.db.loadPostTags(p)
+		if err != nil {
+			log.Error("[READ] Unable to load tags for post %s: %v", p.ID, err)
+			continue
+		}
 		p.extractData()
 		p.handlePremiumContent(c, false, false, app.cfg)
 		p.HTMLContent = template.HTML(applyMarkdown([]byte(p.Content), "", app.cfg))

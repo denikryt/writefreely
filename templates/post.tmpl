@@ -54,7 +54,7 @@
 			{{template "user-silenced"}}
 		{{end}}
 		
-		<article class="{{.Font}} h-entry">{{if .Title}}<h2 id="title" class="p-name">{{.Title}}</h2>{{end}}{{ if .IsPlainText }}<p id="post-body" class="e-content">{{.Content}}</p>{{ else }}<div id="post-body" class="e-content">{{.HTMLContent}}</div>{{ end }}</article>
+		<article class="{{.Font}} h-entry">{{if .Title}}<h2 id="title" class="p-name">{{.Title}}</h2>{{end}}{{ if .IsPlainText }}<p id="post-body" class="e-content">{{.Content}}</p>{{ else }}<div id="post-body" class="e-content">{{.HTMLContent}}</div>{{ end }}{{if .Tags}}<div class="post-tags" dir="ltr">{{range $i, $tag := .Tags}}{{if $i}}<span class="tag-separator">&middot;</span>{{end}}<a href="/tag:{{$tag}}">{{$tag}}</a>{{end}}</div>{{end}}</article>
 
 		<footer dir="ltr"><hr><nav><p style="font-size: 0.9em">{{localhtml "published with write.as" .Language}}</p></nav></footer>
 	</body>
