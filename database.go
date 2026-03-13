@@ -795,7 +795,6 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) error {
 	params := []interface{}{}
 	var queryUpdates, sep, authCondition string
-	wantsSlug := post.Slug != nil && *post.Slug != ""
 	if post.Slug != nil && *post.Slug != "" {
 		queryUpdates += sep + "slug = ?"
 		sep = ", "
@@ -843,7 +842,7 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 	queryUpdates += sep + "updated = " + db.now()
 
 	var inferredCollectionID int64
-	if wantsSlug || post.CategoriesSet {
+	if post.CategoriesSet {
 		var collID sql.NullInt64
 		err := db.QueryRow("SELECT collection_id FROM posts WHERE id = ? AND owner_id = ?", post.ID, userID).Scan(&collID)
 		switch {
@@ -858,10 +857,8 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 			if err != nil {
 				return err
 			}
-			if collCount == 1 && inferredCollectionID != 0 {
-				queryUpdates += sep + "collection_id = ?"
-				sep = ", "
-				params = append(params, inferredCollectionID)
+			if collCount != 1 || inferredCollectionID == 0 {
+				return impart.HTTPError{Status: http.StatusBadRequest, Message: "Only collection posts can be assigned to categories."}
 			}
 		}
 	}
