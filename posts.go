@@ -92,7 +92,7 @@ type (
 		Slug     *string                  `json:"slug" schema:"slug"`
 		Title    *string                  `json:"title" schema:"title"`
 		Content  *string                  `json:"body" schema:"body"`
-		Tags     string                   `json:"-" schema:"tags"`
+		Tags     *string                  `json:"-" schema:"tags"`
 		Font     string                   `json:"font" schema:"font"`
 		IsRTL    converter.NullJSONBool   `json:"rtl" schema:"rtl"`
 		Language converter.NullJSONString `json:"lang" schema:"lang"`

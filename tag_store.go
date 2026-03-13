@@ -1,18 +1,27 @@
+/*
+ * Copyright © 2026 Musing Studio LLC.
+ *
+ * This file is part of WriteFreely.
+ *
+ * WriteFreely is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, included
+ * in the LICENSE file in this source code package.
+ */
+
 package writefreely
 
 import (
 	"database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/gosimple/slug"
 )
 
 type Tag struct {
-	ID           int64  `db:"id" json:"id"`
-	CollectionID int64  `db:"collection_id" json:"collection_id"`
-	Name         string `db:"name" json:"name"`
-	Slug         string `db:"slug" json:"slug"`
+	ID           int64
+	CollectionID int64
+	Name         string
+	Slug         string
 }
 
 func normalizeTags(raw string) []string {
@@ -44,10 +53,14 @@ func formatTags(tags []string) string {
 	return strings.Join(tags, ", ")
 }
 
-func (db *datastore) GetPostTags(postID string) ([]string, error) {
-	if err := db.ensureExplicitTagsSchema(); err != nil {
-		return nil, err
+func normalizePostTags(raw *string) []string {
+	if raw == nil {
+		return nil
 	}
+	return normalizeTags(*raw)
+}
+
+func (db *datastore) GetPostTags(postID string) ([]string, error) {
 	rows, err := db.Query(`SELECT t.slug
 FROM tags t
 INNER JOIN post_tags pt ON pt.tag_id = t.id
@@ -69,10 +82,16 @@ ORDER BY pt.position ASC, t.slug ASC`, postID)
 	return tags, rows.Err()
 }
 
-func (db *datastore) AssignPostTags(postID string, collectionID int64, tags []string) error {
-	if err := db.ensureExplicitTagsSchema(); err != nil {
+func (db *datastore) loadPostTags(p *Post) error {
+	tags, err := db.GetPostTags(p.ID)
+	if err != nil {
 		return err
 	}
+	p.Tags = tags
+	return nil
+}
+
+func (db *datastore) AssignPostTags(postID string, collectionID int64, tags []string) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -124,97 +143,4 @@ func (db *datastore) assignPostTagsTx(tx *sql.Tx, postID string, collectionID in
 	}
 
 	return nil
-}
-
-func (db *datastore) ensureExplicitTagsSchema() error {
-	db.explicitTagsSchemaOnce.Do(func() {
-		db.explicitTagsSchemaErr = db.ensureExplicitTagsSchemaInner()
-	})
-	return db.explicitTagsSchemaErr
-}
-
-func (db *datastore) ensureExplicitTagsSchemaInner() error {
-	db.explicitTagsSchemaMu.Lock()
-	defer db.explicitTagsSchemaMu.Unlock()
-
-	if db.driverName == driverSQLite {
-		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS tags (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  collection_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  CONSTRAINT collection_id_slug UNIQUE (collection_id, slug)
-)`); err != nil {
-			return err
-		}
-		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS post_tags (
-  post_id TEXT NOT NULL,
-  tag_id INTEGER NOT NULL,
-  position INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (post_id, tag_id)
-)`); err != nil {
-			return err
-		}
-		if !db.columnExists("post_tags", "position") {
-			if _, err := db.Exec(`ALTER TABLE post_tags ADD COLUMN position INTEGER NOT NULL DEFAULT 0`); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS tags (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  collection_id INT NOT NULL,
-  name VARCHAR(255) COLLATE utf8_bin NOT NULL,
-  slug VARCHAR(255) COLLATE utf8_bin NOT NULL,
-  UNIQUE KEY collection_id_slug (collection_id, slug)
-) ENGINE=InnoDB`); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS post_tags (
-  post_id CHAR(16) NOT NULL,
-  tag_id INT NOT NULL,
-  position INT NOT NULL DEFAULT 0,
-  PRIMARY KEY (post_id, tag_id),
-  KEY tag_id (tag_id)
-) ENGINE=InnoDB`); err != nil {
-		return err
-	}
-	if !db.columnExists("post_tags", "position") {
-		if _, err := db.Exec(`ALTER TABLE post_tags ADD COLUMN position INT NOT NULL DEFAULT 0`); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (db *datastore) columnExists(table, column string) bool {
-	var dummy string
-	var err error
-	if db.driverName == driverSQLite {
-		rows, qErr := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
-		if qErr != nil {
-			return false
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var cid int
-			var name, ctype string
-			var notnull, pk int
-			var dflt sql.NullString
-			if scanErr := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); scanErr != nil {
-				return false
-			}
-			if name == column {
-				return true
-			}
-		}
-		return false
-	}
-
-	err = db.QueryRow(`SELECT COLUMN_NAME
-FROM INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`, table, column).Scan(&dummy)
-	return err == nil && dummy == column
 }

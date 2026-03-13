@@ -114,7 +114,7 @@ func (app *App) FetchPublicPosts() (interface{}, error) {
 			c.Monetization = app.db.GetCollectionAttribute(c.ID, "monetization_pointer")
 		}
 
-		p.Tags, err = app.db.GetPostTags(p.ID)
+		err = app.db.loadPostTags(p)
 		if err != nil {
 			log.Error("[READ] Unable to load tags for post %s: %v", p.ID, err)
 			continue

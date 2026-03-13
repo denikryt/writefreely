@@ -872,10 +872,6 @@ func connectToDatabase(app *App) {
 		os.Exit(1)
 	}
 	app.db = &datastore{DB: db, driverName: app.cfg.Database.Type}
-	if err := app.db.ensureExplicitTagsSchema(); err != nil {
-		log.Error("Unable to initialize explicit tags schema: %v", err)
-		os.Exit(1)
-	}
 }
 
 func shutdown(app *App) {

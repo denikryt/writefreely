@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/writeas/monday"
@@ -155,10 +154,7 @@ type datastore struct {
 	*sql.DB
 	driverName string
 
-	useSpencerRegex        bool
-	explicitTagsSchemaMu   sync.Mutex
-	explicitTagsSchemaOnce sync.Once
-	explicitTagsSchemaErr  error
+	useSpencerRegex bool
 }
 
 var _ writestore = &datastore{}
@@ -768,7 +764,7 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 			return nil, handleFailedPostInsert(err)
 		}
 	}
-	if err = db.assignPostTagsTx(tx, friendlyID, collID, normalizeTags(post.Tags)); err != nil {
+	if err = db.assignPostTagsTx(tx, friendlyID, collID, normalizePostTags(post.Tags)); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -790,7 +786,7 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 		Updated:      time.Now().Truncate(time.Second).UTC(),
 		Title:        zero.NewString(*(post.Title), true),
 		Content:      *(post.Content),
-		Tags:         normalizeTags(post.Tags),
+		Tags:         normalizePostTags(post.Tags),
 	}, nil
 }
 
@@ -799,7 +795,7 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) error {
 	params := []interface{}{}
 	var queryUpdates, sep, authCondition string
-	shouldUpdateTags := post.Web || post.Tags != ""
+	shouldUpdateTags := post.Tags != nil
 	if post.Slug != nil && *post.Slug != "" {
 		queryUpdates += sep + "slug = ?"
 		sep = ", "
@@ -881,7 +877,7 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 	}
 
 	if shouldUpdateTags {
-		if err = db.assignPostTagsTx(tx, post.ID, collectionID.Int64, normalizeTags(post.Tags)); err != nil {
+		if err = db.assignPostTagsTx(tx, post.ID, collectionID.Int64, normalizePostTags(post.Tags)); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -1184,7 +1180,7 @@ func (db *datastore) GetEditablePost(id, editToken string) (*PublicPost, error) 
 		return nil, ErrPostUnpublished
 	}
 
-	p.Tags, err = db.GetPostTags(p.ID)
+	err = db.loadPostTags(p)
 	if err != nil {
 		return nil, err
 	}
@@ -1244,7 +1240,7 @@ func (db *datastore) GetPost(id string, collectionID int64) (*PublicPost, error)
 	if err != nil {
 		return nil, err
 	}
-	p.Tags, err = db.GetPostTags(p.ID)
+	err = db.loadPostTags(p)
 	if err != nil {
 		return nil, err
 	}
@@ -1278,7 +1274,7 @@ func (db *datastore) GetOwnedPost(id string, ownerID int64) (*PublicPost, error)
 		return nil, ErrPostUnpublished
 	}
 
-	p.Tags, err = db.GetPostTags(p.ID)
+	err = db.loadPostTags(p)
 	if err != nil {
 		return nil, err
 	}
@@ -1403,7 +1399,7 @@ func (db *datastore) GetPosts(cfg *config.Config, c *Collection, page int, inclu
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(p)
 		if err != nil {
 			return nil, err
 		}
@@ -1524,7 +1520,7 @@ ORDER BY p.created `+order+limitStr, collID, collID, strings.ToLower(tag))
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(p)
 		if err != nil {
 			return nil, err
 		}
@@ -1596,7 +1592,7 @@ ORDER BY created `+order+limitStr, collID, lang)
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(p)
 		if err != nil {
 			return nil, err
 		}
@@ -1977,7 +1973,7 @@ func (db *datastore) GetPinnedPosts(coll *CollectionObj, includeFuture bool) (*[
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(p)
 		if err != nil {
 			return nil, err
 		}
@@ -2152,7 +2148,7 @@ func (db *datastore) GetTopPosts(u *User, alias string, hostName string) (*[]Pub
 			gotErr = true
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(&p)
 		if err != nil {
 			log.Error("Failed GetPostTags(%s): %v", p.ID, err)
 			gotErr = true
@@ -2218,7 +2214,7 @@ func (db *datastore) GetAnonymousPosts(u *User, page int) (*[]PublicPost, error)
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(&p)
 		if err != nil {
 			return nil, err
 		}
@@ -2255,7 +2251,7 @@ func (db *datastore) GetUserPosts(u *User) (*[]PublicPost, error) {
 			gotErr = true
 			break
 		}
-		p.Tags, err = db.GetPostTags(p.ID)
+		err = db.loadPostTags(&p)
 		if err != nil {
 			log.Error("Failed GetPostTags(%s): %v", p.ID, err)
 			gotErr = true
