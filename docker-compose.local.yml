@@ -1,5 +1,6 @@
-version: "3.8"
-
+volumes:
+  db-data:
+  web-keys:
 services:
   writefreely-web:
     build:
@@ -7,12 +8,18 @@ services:
       dockerfile: Dockerfile
     container_name: writefreely-web-local
     depends_on:
-      - writefreely-db
+      writefreely-db:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/go/cmd/docker-entrypoint-local.sh"]
+    user: "0:0"
+    environment:
+      WRITEFREELY_ADMIN_USER: admin
+      WRITEFREELY_ADMIN_PASS: adminpass
     ports:
       - "8080:8080"
     volumes:
       - ./config.docker.ini:/go/config.ini:ro
-      - ./keys:/go/keys
+      - web-keys:/go/keys
     restart: unless-stopped
 
   writefreely-db:
@@ -23,7 +30,11 @@ services:
       MYSQL_USER: writefreely
       MYSQL_PASSWORD: P@ssw0rd
       MYSQL_ROOT_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
-      - ./db-data:/var/lib/mysql
-      - ./schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+      - db-data:/var/lib/mysql
     restart: unless-stopped
