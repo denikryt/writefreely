@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  writefreely-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: writefreely-web-local
+    depends_on:
+      - writefreely-db
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.docker.ini:/go/config.ini:ro
+      - ./keys:/go/keys
+    restart: unless-stopped
+
+  writefreely-db:
+    image: mariadb:latest
+    container_name: writefreely-db-local
+    environment:
+      MYSQL_DATABASE: writefreely
+      MYSQL_USER: writefreely
+      MYSQL_PASSWORD: P@ssw0rd
+      MYSQL_ROOT_PASSWORD: changeme
+    volumes:
+      - ./db-data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    restart: unless-stopped
