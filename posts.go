@@ -35,6 +35,7 @@ import (
 	"github.com/writeas/web-core/converter"
 	"github.com/writeas/web-core/i18n"
 	"github.com/writeas/web-core/log"
+	"github.com/writefreely/writefreely/config"
 	"github.com/writefreely/writefreely/page"
 	"github.com/writefreely/writefreely/parse"
 	"github.com/writefreely/writefreely/spam"
@@ -1223,6 +1224,36 @@ func (pp *PublicPost) DisplayCanonicalURL() string {
 	return u.Hostname() + u.Path
 }
 
+func (p *PublicPost) activityTagBaseURL(cfg *config.Config) string {
+	if isSingleUser {
+		return p.Collection.CanonicalURL() + "tag:"
+	}
+	if cfg.App.Chorus {
+		return fmt.Sprintf("%s/read/t/", p.Collection.hostName)
+	}
+	return fmt.Sprintf("%s/%s/tag:", p.Collection.hostName, p.Collection.Alias)
+}
+
+func (p *PublicPost) activityHashtagObjects(cfg *config.Config) []activitystreams.Tag {
+	if len(p.Tags) == 0 {
+		return nil
+	}
+
+	tagBaseURL := p.activityTagBaseURL(cfg)
+	tags := make([]activitystreams.Tag, 0, len(p.Tags))
+	for _, t := range p.Tags {
+		if t == "" {
+			continue
+		}
+		tags = append(tags, activitystreams.Tag{
+			Type: activitystreams.TagHashtag,
+			HRef: tagBaseURL + t,
+			Name: "#" + t,
+		})
+	}
+	return tags
+}
+
 func (p *PublicPost) ActivityObject(app *App) *activitystreams.Object {
 	cfg := app.cfg
 	var o *activitystreams.Object
@@ -1255,8 +1286,7 @@ func (p *PublicPost) ActivityObject(app *App) *activitystreams.Object {
 			p.Language.String: string(p.HTMLContent),
 		}
 	}
-	// Explicit tag federation is handled in a follow-up branch.
-	o.Tag = []activitystreams.Tag{}
+	o.Tag = p.activityHashtagObjects(cfg)
 	if len(p.Images) > 0 {
 		for _, i := range p.Images {
 			o.Attachment = append(o.Attachment, activitystreams.NewImageAttachment(i))
