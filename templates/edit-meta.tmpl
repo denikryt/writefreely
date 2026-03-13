@@ -261,6 +261,10 @@
 						<input type="text" id="created" name="created" value="{{.Post.UserFacingCreated}}" data-time="{{.Post.Created8601}}" placeholder="YYYY-MM-DD HH:MM:SS" maxlength="19" /> <span id="tz">UTC</span> <a href="#" id="set-now">now</a>
 						<p class="error" id="create-error">Date format should be: <span class="mono"><abbr title="The full year">YYYY</abbr>-<abbr title="The numeric month of the year, where January = 1, with a zero in front if less than 10">MM</abbr>-<abbr title="The day of the month, with a zero in front if less than 10">DD</abbr> <abbr title="The hour (00-23), with a zero in front if less than 10.">HH</abbr>:<abbr title="The minute of the hour (00-59), with a zero in front if less than 10.">MM</abbr>:<abbr title="The seconds (00-59), with a zero in front if less than 10.">SS</abbr></span></p>
 					</dd>
+					{{if .EditCollection}}
+					<dt><label for="tags">Tags</label></dt>
+					<dd><input type="text" id="tags" name="tags" value="{{.Post.Tags}}" placeholder="linux, fediverse, blender" /></dd>
+					{{end}}
 					<dt>&nbsp;</dt><dd><input type="submit" value="Save changes" /></dd>
 				</dl>
 				<input type="hidden" name="web" value="true" />

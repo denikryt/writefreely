@@ -138,6 +138,33 @@ CREATE TABLE IF NOT EXISTS `posts` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table tags
+--
+
+CREATE TABLE IF NOT EXISTS `tags` (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  collection_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  CONSTRAINT collection_id_slug UNIQUE (collection_id, slug)
+);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table post_tags
+--
+
+CREATE TABLE IF NOT EXISTS `post_tags` (
+  post_id TEXT NOT NULL,
+  tag_id INTEGER NOT NULL,
+  position INTEGER NOT NULL,
+  PRIMARY KEY (post_id, tag_id)
+);
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table remotefollows
 --
 

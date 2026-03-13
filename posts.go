@@ -35,7 +35,6 @@ import (
 	"github.com/writeas/web-core/converter"
 	"github.com/writeas/web-core/i18n"
 	"github.com/writeas/web-core/log"
-	"github.com/writeas/web-core/tags"
 	"github.com/writefreely/writefreely/page"
 	"github.com/writefreely/writefreely/parse"
 	"github.com/writefreely/writefreely/spam"
@@ -93,6 +92,7 @@ type (
 		Slug     *string                  `json:"slug" schema:"slug"`
 		Title    *string                  `json:"title" schema:"title"`
 		Content  *string                  `json:"body" schema:"body"`
+		Tags     string                   `json:"-" schema:"tags"`
 		Font     string                   `json:"font" schema:"font"`
 		IsRTL    converter.NullJSONBool   `json:"rtl" schema:"rtl"`
 		Language converter.NullJSONString `json:"lang" schema:"lang"`
@@ -166,6 +166,7 @@ type (
 		Id, Slug     string
 		Title        string
 		Content      string
+		Tags         string
 		Views        int64
 		Font         string
 		Created      time.Time
@@ -288,11 +289,13 @@ func (p *Post) IsScheduled() bool {
 }
 
 func (p *Post) HasTag(tag string) bool {
-	// Regexp looks for tag and has a non-capturing group at the end looking
-	// for the end of the word.
-	// Assisted by: https://stackoverflow.com/a/35192941/1549194
-	hasTag, _ := regexp.MatchString("#"+tag+`(?:[[:punct:]]|\s|\z)`, p.Content)
-	return hasTag
+	tag = strings.ToLower(tag)
+	for _, existing := range p.Tags {
+		if existing == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Post) HasTitleLink() bool {
@@ -1252,27 +1255,8 @@ func (p *PublicPost) ActivityObject(app *App) *activitystreams.Object {
 			p.Language.String: string(p.HTMLContent),
 		}
 	}
-	if len(p.Tags) == 0 {
-		o.Tag = []activitystreams.Tag{}
-	} else {
-		var tagBaseURL string
-		if isSingleUser {
-			tagBaseURL = p.Collection.CanonicalURL() + "tag:"
-		} else {
-			if cfg.App.Chorus {
-				tagBaseURL = fmt.Sprintf("%s/read/t/", p.Collection.hostName)
-			} else {
-				tagBaseURL = fmt.Sprintf("%s/%s/tag:", p.Collection.hostName, p.Collection.Alias)
-			}
-		}
-		for _, t := range p.Tags {
-			o.Tag = append(o.Tag, activitystreams.Tag{
-				Type: activitystreams.TagHashtag,
-				HRef: tagBaseURL + t,
-				Name: "#" + t,
-			})
-		}
-	}
+	// Explicit tag federation is handled in a follow-up branch.
+	o.Tag = []activitystreams.Tag{}
 	if len(p.Images) > 0 {
 		for _, i := range p.Images {
 			o.Attachment = append(o.Attachment, activitystreams.NewImageAttachment(i))
@@ -1395,9 +1379,15 @@ func getRawPost(app *App, friendlyID string) *RawPost {
 		return &RawPost{Content: "", Found: true, Gone: false}
 	}
 
+	postTags, err := app.db.GetPostTags(friendlyID)
+	if err != nil {
+		log.Error("Unable to fetch raw post tags: %s", err)
+	}
+
 	return &RawPost{
 		Title:    title,
 		Content:  content,
+		Tags:     formatTags(postTags),
 		Font:     font,
 		Created:  created,
 		Updated:  updated,
@@ -1433,11 +1423,17 @@ func getRawCollectionPost(app *App, slug, collAlias string) *RawPost {
 		return &RawPost{Content: "", Found: true, Gone: false}
 	}
 
+	postTags, err := app.db.GetPostTags(id)
+	if err != nil {
+		log.Error("Unable to fetch raw collection post tags: %s", err)
+	}
+
 	return &RawPost{
 		Id:       id,
 		Slug:     slug,
 		Title:    title,
 		Content:  content,
+		Tags:     formatTags(postTags),
 		Font:     font,
 		Created:  created,
 		Updated:  updated,
@@ -1712,7 +1708,6 @@ func PostsContains(sl *[]PublicPost, s *PublicPost) bool {
 }
 
 func (p *Post) extractData() {
-	p.Tags = tags.Extract(p.Content)
 	p.extractImages()
 }
 
