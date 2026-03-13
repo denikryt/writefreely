@@ -229,46 +229,6 @@ textarea.section.norm {
 	</div>
 
 	<div class="option">
-		<h2>Categories</h2>
-		<div class="section">
-			<p class="explain">Create internal collections for this blog and use them to group related posts.</p>
-			{{if .Categories}}
-			<ul id="categories-list">
-				{{range .Categories}}
-				<li id="category-{{.Slug}}" data-category-title="{{.Title}}" data-category-slug="{{.Slug}}" data-category-description="{{.Description}}">
-					<div class="category-meta">
-						<div><strong>{{.Title}}</strong> <code>/category/{{.Slug}}</code></div>
-						{{if .Description}}<p class="explain">{{.Description}}</p>{{end}}
-						<p class="explain"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
-					</div>
-					<div class="category-actions">
-						<button type="button" class="cta secondary" onclick="editCategory('{{.Slug}}')">Edit</button>
-						<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
-					</div>
-				</li>
-				{{end}}
-			</ul>
-			{{else}}
-			<p class="explain" id="categories-empty">No categories yet.</p>
-			{{end}}
-
-			<ul id="category-errors" class="errors"></ul>
-
-			<div id="category-form" style="margin-top:1em;">
-				<input type="hidden" id="category-current-slug" value="" />
-				<p><input type="text" id="category-title" placeholder="Category title" maxlength="255" style="width:100%" /></p>
-				<p><input type="text" id="category-slug" placeholder="category-slug (optional)" maxlength="100" style="width:100%" /></p>
-				<p><textarea id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
-				<p class="explain">If slug is empty, it will be generated from the title.</p>
-				<p id="category-form-actions">
-					<input type="button" id="create-category" class="cta" value="Create category" onclick="submitCategory()" />
-					<a id="cancel-category-edit" href="#" onclick="cancelCategoryEdit(); return false;">Cancel</a>
-				</p>
-			</div>
-		</div>
-	</div>
-
-	<div class="option">
 		<h2>Post Signature</h2>
 		<div class="section">
 			<p class="explain">This content will be added to the end of every post on this blog, as if it were part of the post itself. Markdown, HTML, and shortcodes are allowed.</p>
@@ -302,6 +262,46 @@ textarea.section.norm {
 	</div>
 </div>
 </form>
+
+<div class="option">
+	<h2>Categories</h2>
+	<div class="section">
+		<p class="explain">Create internal collections for this blog and use them to group related posts.</p>
+		{{if .Categories}}
+		<ul id="categories-list">
+			{{range .Categories}}
+			<li id="category-{{.Slug}}" data-category-title="{{.Title}}" data-category-slug="{{.Slug}}" data-category-description="{{.Description}}">
+				<div class="category-meta">
+					<div><strong>{{.Title}}</strong> <code>/category/{{.Slug}}</code></div>
+					{{if .Description}}<p class="explain">{{.Description}}</p>{{end}}
+					<p class="explain"><a href="{{if $.SingleUser}}/category/{{.Slug}}{{else}}/{{$.Alias}}/category/{{.Slug}}{{end}}" target="_blank">View category page</a> &middot; {{.PostCount}} posts</p>
+				</div>
+				<div class="category-actions">
+					<button type="button" onclick="editCategory('{{.Slug}}')">Edit</button>
+					<button type="button" class="danger" onclick="deleteCategory('{{.Slug}}', '{{js .Title}}', this)">Delete</button>
+				</div>
+			</li>
+			{{end}}
+		</ul>
+		{{else}}
+		<p class="explain" id="categories-empty">No categories yet.</p>
+		{{end}}
+
+		<ul id="category-errors" class="errors"></ul>
+
+		<div id="category-form" style="margin-top:1em;">
+			<input type="hidden" id="category-current-slug" value="" />
+			<p><input type="text" id="category-title" placeholder="Category title" maxlength="255" style="width:100%" /></p>
+			<p><input type="text" id="category-slug" placeholder="category-slug (optional)" maxlength="100" style="width:100%" /></p>
+			<p><textarea id="category-description" class="section norm" placeholder="Short category description"></textarea></p>
+			<p class="explain">If slug is empty, it will be generated from the title.</p>
+			<p id="category-form-actions">
+				<input type="button" id="create-category" class="cta" value="Create category" onclick="submitCategory()" />
+				<a id="cancel-category-edit" href="#" onclick="cancelCategoryEdit(); return false;">Cancel</a>
+			</p>
+		</div>
+	</div>
+</div>
 </div>
 
 		<div id="modal-delete" class="modal">
