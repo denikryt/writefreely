@@ -1,25 +1,26 @@
 services:
   app:
-    image: writefreely
-    container_name: writefreely
+    image: ${WRITEFREELY_IMAGE:-ghcr.io/owner/repo:latest}
+    container_name: ${WRITEFREELY_APP_CONTAINER:-writefreely}
     volumes:
-      - ./data:/data
+      - ${WRITEFREELY_DATA_DIR:-./data}:/data
+      - ${WRITEFREELY_PROD_CONFIG:-./config.docker.ini}:/go/config.ini:ro
+      - ${WRITEFREELY_KEYS_DIR:-./keys}:/go/keys
     ports:
-      - 127.0.0.1:8080:8080
+      - 127.0.0.1:${WRITEFREELY_PORT:-8080}:8080
     depends_on:
       - db
     restart: unless-stopped
 
   db:
-    image: lscr.io/linuxserver/mariadb
-    container_name: writefreely-mariadb
-    volumes: 
-      - ./db:/config
+    image: ${MARIADB_IMAGE:-mariadb:latest}
+    container_name: ${WRITEFREELY_DB_CONTAINER:-writefreely-mariadb}
+    volumes:
+      - ${WRITEFREELY_DB_DIR:-./db}:/var/lib/mysql
     environment:
-      - PUID=65534
-      - PGID=65534
-      - TZ=Etc/UTC
-      - MYSQL_DATABASE=writefreely
-      - MYSQL_USER=writefreely
-      - MYSQL_PASSWORD=P@ssw0rd
+      - TZ=${TZ:-Etc/UTC}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-writefreely}
+      - MYSQL_USER=${MYSQL_USER:-writefreely}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
     restart: unless-stopped
