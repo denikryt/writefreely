@@ -1,0 +1,40 @@
+volumes:
+  db-data:
+  web-keys:
+services:
+  writefreely-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${WRITEFREELY_WEB_CONTAINER:-writefreely-web-local}
+    depends_on:
+      writefreely-db:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/go/cmd/docker-entrypoint-local.sh"]
+    user: "0:0"
+    environment:
+      WRITEFREELY_ADMIN_USER: ${WRITEFREELY_ADMIN_USER}
+      WRITEFREELY_ADMIN_PASS: ${WRITEFREELY_ADMIN_PASS}
+    ports:
+      - "${WRITEFREELY_PORT:-8080}:8080"
+    volumes:
+      - ./${WRITEFREELY_DOCKER_CONFIG:-config.docker.ini}:/go/config.ini:ro
+      - web-keys:/go/keys
+    restart: unless-stopped
+
+  writefreely-db:
+    image: mariadb:latest
+    container_name: ${WRITEFREELY_DB_CONTAINER:-writefreely-db-local}
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-writefreely}
+      MYSQL_USER: ${MYSQL_USER:-writefreely}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - db-data:/var/lib/mysql
+    restart: unless-stopped

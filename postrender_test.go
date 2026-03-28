@@ -10,7 +10,12 @@
 
 package writefreely
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/writefreely/writefreely/config"
+)
 
 func TestApplyBasicMarkdown(t *testing.T) {
 	tests := []struct {
@@ -39,5 +44,22 @@ func TestApplyBasicMarkdown(t *testing.T) {
 				t.Errorf("%s: wanted %s, got %s", test.name, test.result, res)
 			}
 		})
+	}
+}
+
+func TestApplyMarkdownSpecialDoesNotLinkHashtags(t *testing.T) {
+	cfg := config.Config{}
+	cfg.App.Host = "https://example.com"
+
+	res := applyMarkdownSpecial([]byte("I like #linux and @alice@example.org"), "https://example.com/", &cfg, true)
+
+	if strings.Contains(res, `class="hashtag"`) {
+		t.Fatalf("expected hashtags in body to remain plain text, got %s", res)
+	}
+	if !strings.Contains(res, "#linux") {
+		t.Fatalf("expected hashtag text to remain visible, got %s", res)
+	}
+	if !strings.Contains(res, `class="u-url mention"`) {
+		t.Fatalf("expected mentions to still be linkified, got %s", res)
 	}
 }

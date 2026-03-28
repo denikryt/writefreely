@@ -5,6 +5,7 @@
 		<title>Edit metadata: {{if .Post.Title}}{{.Post.Title}}{{else}}{{.Post.Id}}{{end}} &mdash; {{.SiteName}}</title>
 		
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<style type="text/css">
@@ -29,6 +30,16 @@
 		.content-container h2 a:link, .content-container h2 a:visited {
 			color: blue;
 		}
+		html.dark .content-container h2 a:link,
+		html.dark .content-container h2 a:visited,
+		html.dark #set-now:link,
+		html.dark #set-now:visited,
+		body.dark .content-container h2 a:link,
+		body.dark .content-container h2 a:visited,
+		body.dark #set-now:link,
+		body.dark #set-now:visited {
+			color: #b9c7ff;
+		}
 		.content-container h2 a:hover {
 			text-decoration: underline;
 		}
@@ -45,15 +56,15 @@
 				</ul></nav>
 			</div>
 			<div id="belt">
-				<div class="tool if-room"><a href="{{if .EditCollection}}{{.EditCollection.CanonicalURL}}{{.Post.Slug}}/edit{{else}}/{{.Post.Id}}/edit{{end}}" title="Edit post" id="edit"><img class="ic-24dp" src="/img/ic_edit_dark@2x.png" /></a></div>
+				<div class="tool if-room"><a href="{{if and .EditCollection .Post.Slug .Post.CollectionID.Valid}}{{.EditCollection.CanonicalURL}}{{.Post.Slug}}/edit{{else}}/{{if .SingleUser}}d/{{end}}{{.Post.Id}}/edit{{end}}" title="Edit post" id="edit"><img class="ic-24dp" src="/img/ic_edit_dark@2x.png" /></a></div>
 				<div class="tool if-room room-2"><a href="#theme" title="Toggle theme" id="toggle-theme"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a></div>
 				<div class="tool if-room room-1"><a href="/me/posts/" title="View posts" id="view-posts"><img class="ic-24dp" src="/img/ic_list_dark@2x.png" /></a></div>
 			</div>
 		</header>
 		
 		<div class="content-container tight">
-			<form action="/api/{{if .EditCollection}}collections/{{.EditCollection.Alias}}/{{end}}posts/{{.Post.Id}}" method="post" onsubmit="return updateMeta()">
-				<h2>Edit metadata: {{if .Post.Title}}{{.Post.Title}}{{else}}{{.Post.Id}}{{end}} <a href="/{{if .EditCollection}}{{if not .SingleUser}}{{.EditCollection.Alias}}/{{end}}{{.Post.Slug}}{{else}}{{if .SingleUser}}d/{{end}}{{.Post.Id}}{{end}}">view post</a></h2>
+			<form action="/api/{{if and .EditCollection .Post.Slug .Post.CollectionID.Valid}}collections/{{.EditCollection.Alias}}/{{end}}posts/{{.Post.Id}}" method="post" onsubmit="return updateMeta()">
+				<h2>Edit metadata: {{if .Post.Title}}{{.Post.Title}}{{else}}{{.Post.Id}}{{end}} <a href="/{{if and .EditCollection .Post.Slug .Post.CollectionID.Valid}}{{if not .SingleUser}}{{.EditCollection.Alias}}/{{end}}{{.Post.Slug}}{{else}}{{if .SingleUser}}d/{{end}}{{.Post.Id}}{{end}}">view post</a></h2>
 
 				{{if .Flashes}}<ul class="errors">
 					{{range .Flashes}}<li class="urgent">{{.}}</li>{{end}}
@@ -63,6 +74,16 @@
 					{{if .EditCollection}}
 					<dt><label for="slug">Slug</label></dt>
 					<dd><input type="text" id="slug" name="slug" value="{{.Post.Slug}}" /></dd>
+					{{if .AvailableCategories}}
+					<dt><label for="categories">Categories</label></dt>
+					<dd>
+						<select name="categories" id="categories" class="inputform" multiple size="{{if gt (len .AvailableCategories) 6}}6{{else}}{{len .AvailableCategories}}{{end}}">
+							{{range .AvailableCategories}}<option value="{{.Slug}}"{{if index $.SelectedCategories .Slug}} selected="selected"{{end}}>{{.Title}}</option>{{end}}
+						</select>
+						<p class="description">Hold Ctrl or Command to pick multiple categories.</p>
+						<input type="hidden" name="categories_set" value="true" />
+					</dd>
+					{{end}}
 					{{end}}
 					<dt><label for="lang">Language</label></dt>
 					<dd>
@@ -261,6 +282,10 @@
 						<input type="text" id="created" name="created" value="{{.Post.UserFacingCreated}}" data-time="{{.Post.Created8601}}" placeholder="YYYY-MM-DD HH:MM:SS" maxlength="19" /> <span id="tz">UTC</span> <a href="#" id="set-now">now</a>
 						<p class="error" id="create-error">Date format should be: <span class="mono"><abbr title="The full year">YYYY</abbr>-<abbr title="The numeric month of the year, where January = 1, with a zero in front if less than 10">MM</abbr>-<abbr title="The day of the month, with a zero in front if less than 10">DD</abbr> <abbr title="The hour (00-23), with a zero in front if less than 10.">HH</abbr>:<abbr title="The minute of the hour (00-59), with a zero in front if less than 10.">MM</abbr>:<abbr title="The seconds (00-59), with a zero in front if less than 10.">SS</abbr></span></p>
 					</dd>
+					{{if or .EditCollection .SingleUser}}
+					<dt><label for="tags">Tags</label></dt>
+					<dd><input type="text" id="tags" name="tags" value="{{.Post.Tags}}" placeholder="linux, fediverse, blender" /></dd>
+					{{end}}
 					<dt>&nbsp;</dt><dd><input type="submit" value="Save changes" /></dd>
 				</dl>
 				<input type="hidden" name="web" value="true" />
@@ -353,22 +378,6 @@ H.getEl('set-now').on('click', function(e) {
 			} catch(e) {}
 			toggleTheme();
 		});
-
-		WebFontConfig = {
-			custom: { families: [ 'Lora:400,700:latin' ], urls: [ '/css/fonts.css' ] }
-		};
-		try {
-		  (function() {
-			var wf=document.createElement('script');
-			wf.src = '/js/webfont.js';
-			wf.type='text/javascript';
-			wf.async='true';
-			var s=document.getElementsByTagName('script')[0];
-			s.parentNode.insertBefore(wf, s);
-		  })();
-		} catch (e) {
-		  // whatevs
-		}
 		</script>
 		<link href="/css/icons.css" rel="stylesheet">
 	</body>

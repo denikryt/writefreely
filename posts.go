@@ -35,7 +35,7 @@ import (
 	"github.com/writeas/web-core/converter"
 	"github.com/writeas/web-core/i18n"
 	"github.com/writeas/web-core/log"
-	"github.com/writeas/web-core/tags"
+	"github.com/writefreely/writefreely/config"
 	"github.com/writefreely/writefreely/page"
 	"github.com/writefreely/writefreely/parse"
 	"github.com/writefreely/writefreely/spam"
@@ -90,13 +90,16 @@ type (
 	// updating. Since Title and Content can be updated to "", they are
 	// pointers that can be easily tested to detect changes.
 	SubmittedPost struct {
-		Slug     *string                  `json:"slug" schema:"slug"`
-		Title    *string                  `json:"title" schema:"title"`
-		Content  *string                  `json:"body" schema:"body"`
-		Font     string                   `json:"font" schema:"font"`
-		IsRTL    converter.NullJSONBool   `json:"rtl" schema:"rtl"`
-		Language converter.NullJSONString `json:"lang" schema:"lang"`
-		Created  *string                  `json:"created" schema:"created"`
+		Slug          *string                  `json:"slug" schema:"slug"`
+		Title         *string                  `json:"title" schema:"title"`
+		Content       *string                  `json:"body" schema:"body"`
+		Tags          *string                  `json:"-" schema:"tags"`
+		Font          string                   `json:"font" schema:"font"`
+		IsRTL         converter.NullJSONBool   `json:"rtl" schema:"rtl"`
+		Language      converter.NullJSONString `json:"lang" schema:"lang"`
+		Created       *string                  `json:"created" schema:"created"`
+		Categories    []string                 `json:"categories" schema:"categories"`
+		CategoriesSet bool                     `json:"categories_set" schema:"categories_set"`
 	}
 
 	// Post represents a post as found in the database.
@@ -120,6 +123,7 @@ type (
 		HTMLContent    template.HTML `db:"content" json:"-"`
 		HTMLExcerpt    template.HTML `db:"content" json:"-"`
 		Tags           []string      `json:"tags"`
+		Categories     []Category    `json:"categories,omitempty"`
 		Images         []string      `json:"images,omitempty"`
 		IsPaid         bool          `json:"paid"`
 
@@ -166,12 +170,14 @@ type (
 		Id, Slug     string
 		Title        string
 		Content      string
+		Tags         string
 		Views        int64
 		Font         string
 		Created      time.Time
 		Updated      time.Time
 		IsRTL        sql.NullBool
 		Language     sql.NullString
+		Categories   []Category
 		OwnerID      int64
 		CollectionID sql.NullInt64
 
@@ -219,8 +225,9 @@ func (p *Post) DisplayTitle() string {
 	return t
 }
 
-// PlainDisplayTitle dynamically generates a title from the Post's contents if it
-// doesn't already have an explicit title.
+// PlainDisplayTitle strips away Markdown from the generated Post's title (if
+// any), for use in places like RSS feeds and ActivityStreams objects, where
+// the raw Markdown would be unwanted.
 func (p *Post) PlainDisplayTitle() string {
 	if t := stripmd.Strip(p.DisplayTitle()); t != "" {
 		return t
@@ -287,11 +294,13 @@ func (p *Post) IsScheduled() bool {
 }
 
 func (p *Post) HasTag(tag string) bool {
-	// Regexp looks for tag and has a non-capturing group at the end looking
-	// for the end of the word.
-	// Assisted by: https://stackoverflow.com/a/35192941/1549194
-	hasTag, _ := regexp.MatchString("#"+tag+`(?:[[:punct:]]|\s|\z)`, p.Content)
-	return hasTag
+	tag = strings.ToLower(tag)
+	for _, existing := range p.Tags {
+		if existing == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Post) HasTitleLink() bool {
@@ -701,18 +710,24 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	reqJSON := IsJSON(r)
 	vars := mux.Vars(r)
 	postID := vars["post"]
+	collectionAlias := vars["alias"]
 
 	p := AuthenticatedPost{ID: postID}
 	var err error
 
 	if reqJSON {
-		// Decode JSON request
+		var req struct {
+			Web bool `json:"web"`
+			SubmittedPost
+		}
 		decoder := json.NewDecoder(r.Body)
-		err = decoder.Decode(&p)
+		err = decoder.Decode(&req)
 		if err != nil {
 			log.Error("Couldn't parse post update JSON request: %v\n", err)
 			return ErrBadJSON
 		}
+		p.Web = req.Web
+		p.SubmittedPost = &req.SubmittedPost
 	} else {
 		err = r.ParseForm()
 		if err != nil {
@@ -720,13 +735,18 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 			return ErrBadFormData
 		}
 
-		// Can't decode to a nil SubmittedPost property, so create instance now
-		p.SubmittedPost = &SubmittedPost{}
-		err = app.formDecoder.Decode(&p, r.PostForm)
+		var req struct {
+			Web bool `schema:"web"`
+			SubmittedPost
+		}
+		err = app.formDecoder.Decode(&req, r.PostForm)
 		if err != nil {
 			log.Error("Couldn't decode post update form request: %v\n", err)
 			return ErrBadFormData
 		}
+		p.Web = req.Web
+		p.SubmittedPost = &req.SubmittedPost
+		_, p.CategoriesSet = r.PostForm["categories_set"]
 	}
 
 	if p.Web {
@@ -787,6 +807,19 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if collectionAlias != "" {
+		coll, collErr := app.db.GetCollection(collectionAlias)
+		if collErr != nil {
+			return collErr
+		}
+		if coll.OwnerID != userID {
+			return ErrForbiddenCollection
+		}
+		if _, collErr = app.db.Exec("UPDATE posts SET collection_id = ? WHERE id = ? AND owner_id = ? AND collection_id IS NULL", coll.ID, p.ID, userID); collErr != nil {
+			return collErr
+		}
+	}
+
 	var pRes *PublicPost
 	pRes, err = app.db.GetPost(p.ID, 0)
 	if reqJSON {
@@ -811,18 +844,21 @@ func existingPost(app *App, w http.ResponseWriter, r *http.Request) error {
 	}
 
 	addSessionFlash(app, w, r, "Changes saved.", nil)
-	collectionAlias := vars["alias"]
 	redirect := "/" + postID + "/meta"
-	if collectionAlias != "" {
+	if pRes.CollectionID.Valid && pRes.Slug.Valid {
 		collPre := "/" + collectionAlias
+		if collectionAlias == "" {
+			if coll, collErr := app.db.GetCollectionBy("id = ?", pRes.CollectionID.Int64); collErr == nil {
+				collectionAlias = coll.Alias
+				collPre = "/" + collectionAlias
+			}
+		}
 		if app.cfg.App.SingleUser {
 			collPre = ""
 		}
 		redirect = collPre + "/" + pRes.Slug.String + "/edit/meta"
-	} else {
-		if app.cfg.App.SingleUser {
-			redirect = "/d" + redirect
-		}
+	} else if app.cfg.App.SingleUser {
+		redirect = "/d" + redirect
 	}
 	w.Header().Set("Location", redirect)
 	w.WriteHeader(http.StatusFound)
@@ -867,6 +903,9 @@ func deletePost(app *App, w http.ResponseWriter, r *http.Request) error {
 			// unexpectedly. So prevent deletion via token.
 			return impart.HTTPError{http.StatusConflict, "This post belongs to some user (hopefully yours). Please log in and delete it from that user's account."}
 		}
+		if _, err = app.db.Exec("DELETE FROM post_categories WHERE post_id = ?", friendlyID); err != nil {
+			return err
+		}
 		res, err = app.db.Exec("DELETE FROM posts WHERE id = ? AND modify_token = ? AND owner_id IS NULL", friendlyID, editToken)
 	} else if accessToken != "" || u != nil {
 		// Caller provided some way to authenticate; assume caller expects the
@@ -889,6 +928,9 @@ func deletePost(app *App, w http.ResponseWriter, r *http.Request) error {
 		}
 		if !collID.Valid {
 			// There's no collection; simply delete the post
+			if _, err = app.db.Exec("DELETE FROM post_categories WHERE post_id = ?", friendlyID); err != nil {
+				return err
+			}
 			res, err = app.db.Exec("DELETE FROM posts WHERE id = ? AND owner_id = ?", friendlyID, ownerID)
 		} else {
 			// Post belongs to a collection; do any additional clean up
@@ -911,6 +953,10 @@ func deletePost(app *App, w http.ResponseWriter, r *http.Request) error {
 			t, err = app.db.Begin()
 			if err != nil {
 				log.Error("No begin: %v", err)
+				return err
+			}
+			if _, err = t.Exec("DELETE FROM post_categories WHERE post_id = ?", friendlyID); err != nil {
+				t.Rollback()
 				return err
 			}
 			res, err = t.Exec("DELETE FROM posts WHERE id = ? AND owner_id = ?", friendlyID, ownerID)
@@ -1219,6 +1265,36 @@ func (pp *PublicPost) DisplayCanonicalURL() string {
 	return u.Hostname() + u.Path
 }
 
+func (p *PublicPost) activityTagBaseURL(cfg *config.Config) string {
+	if isSingleUser {
+		return p.Collection.CanonicalURL() + "tag:"
+	}
+	if cfg.App.Chorus {
+		return fmt.Sprintf("%s/read/t/", p.Collection.hostName)
+	}
+	return fmt.Sprintf("%s/%s/tag:", p.Collection.hostName, p.Collection.Alias)
+}
+
+func (p *PublicPost) activityHashtagObjects(cfg *config.Config) []activitystreams.Tag {
+	if len(p.Tags) == 0 {
+		return nil
+	}
+
+	tagBaseURL := p.activityTagBaseURL(cfg)
+	tags := make([]activitystreams.Tag, 0, len(p.Tags))
+	for _, t := range p.Tags {
+		if t == "" {
+			continue
+		}
+		tags = append(tags, activitystreams.Tag{
+			Type: activitystreams.TagHashtag,
+			HRef: tagBaseURL + t,
+			Name: "#" + t,
+		})
+	}
+	return tags
+}
+
 func (p *PublicPost) ActivityObject(app *App) *activitystreams.Object {
 	cfg := app.cfg
 	var o *activitystreams.Object
@@ -1234,39 +1310,24 @@ func (p *PublicPost) ActivityObject(app *App) *activitystreams.Object {
 	o.CC = []string{
 		p.Collection.FederatedAccount() + "/followers",
 	}
-	o.Name = p.DisplayTitle()
+	o.Name = p.PlainDisplayTitle()
 	p.augmentContent()
 	if p.HTMLContent == template.HTML("") {
 		p.formatContent(cfg, false, false)
 		p.augmentReadingDestination()
 	}
 	o.Content = string(p.HTMLContent)
+	if o.Type == "Note" && p.Title.String != "" {
+		// Render the explicitly-set title inside the Note, since Mastodon (at least) doesn't show the `name`
+		// property on Notes.
+		o.Content = "<h1>" + applyBasicMarkdown([]byte(p.DisplayTitle())) + "</h1>\n\n" + o.Content
+	}
 	if p.Language.Valid {
 		o.ContentMap = map[string]string{
 			p.Language.String: string(p.HTMLContent),
 		}
 	}
-	if len(p.Tags) == 0 {
-		o.Tag = []activitystreams.Tag{}
-	} else {
-		var tagBaseURL string
-		if isSingleUser {
-			tagBaseURL = p.Collection.CanonicalURL() + "tag:"
-		} else {
-			if cfg.App.Chorus {
-				tagBaseURL = fmt.Sprintf("%s/read/t/", p.Collection.hostName)
-			} else {
-				tagBaseURL = fmt.Sprintf("%s/%s/tag:", p.Collection.hostName, p.Collection.Alias)
-			}
-		}
-		for _, t := range p.Tags {
-			o.Tag = append(o.Tag, activitystreams.Tag{
-				Type: activitystreams.TagHashtag,
-				HRef: tagBaseURL + t,
-				Name: "#" + t,
-			})
-		}
-	}
+	o.Tag = p.activityHashtagObjects(cfg)
 	if len(p.Images) > 0 {
 		for _, i := range p.Images {
 			o.Attachment = append(o.Attachment, activitystreams.NewImageAttachment(i))
@@ -1281,7 +1342,7 @@ func (p *PublicPost) ActivityObject(app *App) *activitystreams.Object {
 
 	for _, handle := range mentions {
 		actorIRI, err := app.db.GetProfilePageFromHandle(app, handle)
-		if err != nil {
+		if err != nil || actorIRI == "" {
 			log.Info("Couldn't find user '%s' locally or remotely", handle)
 			continue
 		}
@@ -1375,12 +1436,14 @@ func (p *SubmittedPost) isFontValid() bool {
 
 func getRawPost(app *App, friendlyID string) *RawPost {
 	var content, font, title string
+	var slug sql.NullString
 	var isRTL sql.NullBool
 	var lang sql.NullString
 	var ownerID sql.NullInt64
+	var collectionID sql.NullInt64
 	var created, updated time.Time
 
-	err := app.db.QueryRow("SELECT title, content, text_appearance, language, rtl, created, updated, owner_id FROM posts WHERE id = ?", friendlyID).Scan(&title, &content, &font, &lang, &isRTL, &created, &updated, &ownerID)
+	err := app.db.QueryRow("SELECT slug, title, content, text_appearance, language, rtl, created, updated, owner_id, collection_id FROM posts WHERE id = ?", friendlyID).Scan(&slug, &title, &content, &font, &lang, &isRTL, &created, &updated, &ownerID, &collectionID)
 	switch {
 	case err == sql.ErrNoRows:
 		return &RawPost{Content: "", Found: false, Gone: false}
@@ -1389,19 +1452,29 @@ func getRawPost(app *App, friendlyID string) *RawPost {
 		return &RawPost{Content: "", Found: true, Gone: false}
 	}
 
-	return &RawPost{
-		Title:    title,
-		Content:  content,
-		Font:     font,
-		Created:  created,
-		Updated:  updated,
-		IsRTL:    isRTL,
-		Language: lang,
-		OwnerID:  ownerID.Int64,
-		Found:    true,
-		Gone:     content == "" && title == "",
+	postTags, err := app.db.GetPostTags(friendlyID)
+	if err != nil {
+		log.Error("Unable to fetch raw post tags: %s", err)
 	}
 
+	post := &RawPost{
+		Id:           friendlyID,
+		Slug:         slug.String,
+		Title:        title,
+		Content:      content,
+		Tags:         formatTags(postTags),
+		Font:         font,
+		Created:      created,
+		Updated:      updated,
+		IsRTL:        isRTL,
+		Language:     lang,
+		OwnerID:      ownerID.Int64,
+		CollectionID: collectionID,
+		Found:        true,
+		Gone:         content == "" && title == "",
+	}
+	post.Categories, _ = app.db.GetPostCategories(friendlyID)
+	return post
 }
 
 // TODO; return a Post!
@@ -1427,11 +1500,17 @@ func getRawCollectionPost(app *App, slug, collAlias string) *RawPost {
 		return &RawPost{Content: "", Found: true, Gone: false}
 	}
 
-	return &RawPost{
+	postTags, err := app.db.GetPostTags(id)
+	if err != nil {
+		log.Error("Unable to fetch raw collection post tags: %s", err)
+	}
+
+	post := &RawPost{
 		Id:       id,
 		Slug:     slug,
 		Title:    title,
 		Content:  content,
+		Tags:     formatTags(postTags),
 		Font:     font,
 		Created:  created,
 		Updated:  updated,
@@ -1442,6 +1521,8 @@ func getRawCollectionPost(app *App, slug, collAlias string) *RawPost {
 		Gone:     content == "" && title == "",
 		Views:    views,
 	}
+	post.Categories, _ = app.db.GetPostCategories(id)
+	return post
 }
 
 func isRaw(r *http.Request) bool {
@@ -1706,7 +1787,6 @@ func PostsContains(sl *[]PublicPost, s *PublicPost) bool {
 }
 
 func (p *Post) extractData() {
-	p.Tags = tags.Extract(p.Content)
 	p.extractImages()
 }
 

@@ -107,6 +107,8 @@ type writestore interface {
 	UpdatePostPinState(pinned bool, postID string, collID, ownerID, pos int64) error
 	GetLastPinnedPostPos(collID int64) int64
 	GetPinnedPosts(coll *CollectionObj, includeFuture bool) (*[]PublicPost, error)
+	GetPostTags(postID string) ([]string, error)
+	AssignPostTags(postID string, collectionID int64, tags []string) error
 	RemoveCollectionRedirect(t *sql.Tx, alias string) error
 	GetCollectionRedirect(alias string) (new string)
 	IsCollectionAttributeOn(id int64, attr string) bool
@@ -498,7 +500,7 @@ func (db *datastore) GetUserDataFromToken(accessToken string) (int64, string, er
 func (db *datastore) GetAPIUser(header string) (*User, error) {
 	uID := db.GetUserID(header)
 	if uID == -1 {
-		return nil, fmt.Errorf(ErrUserNotFound.Error())
+		return nil, ErrUserNotFound
 	}
 	return db.GetUserByID(uID)
 }
@@ -735,11 +737,19 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 		}
 	}
 
-	stmt, err := db.Prepare("INSERT INTO posts (id, slug, title, content, text_appearance, language, rtl, privacy, owner_id, collection_id, created, updated, view_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + db.now() + ", ?)")
+	tx, err := db.Begin()
 	if err != nil {
 		return nil, err
 	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("INSERT INTO posts (id, slug, title, content, text_appearance, language, rtl, privacy, owner_id, collection_id, created, updated, view_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + db.now() + ", ?)")
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
 	defer stmt.Close()
+
 	_, err = stmt.Exec(friendlyID, slug, post.Title, post.Content, appearance, post.Language, post.IsRTL, 0, ownerID, ownerCollID, created, 0)
 	if err != nil {
 		if db.isDuplicateKeyErr(err) {
@@ -748,27 +758,55 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 			slug = sql.NullString{id.GenSafeUniqueSlug(slug.String), true}
 			_, err = stmt.Exec(friendlyID, slug, post.Title, post.Content, appearance, post.Language, post.IsRTL, 0, ownerID, ownerCollID, created, 0)
 			if err != nil {
+				tx.Rollback()
 				return nil, handleFailedPostInsert(fmt.Errorf("Retried slug generation, still failed: %v", err))
 			}
 		} else {
+			tx.Rollback()
 			return nil, handleFailedPostInsert(err)
 		}
 	}
+	tagCollectionID := collID
+	if tagCollectionID <= 0 && post.Tags != nil {
+		tagCollectionID, err = db.getSingleOwnerCollectionID(tx, userID)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+	if err = db.assignPostTagsTx(tx, friendlyID, tagCollectionID, normalizePostTags(post.Tags)); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if ownerCollID.Valid {
+		if err := db.assignPostCategoriesTx(tx, friendlyID, ownerCollID.Int64, post.Categories); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
 
 	// TODO: return Created field in proper format
-	return &Post{
+	createdPost := &Post{
 		ID:           friendlyID,
 		Slug:         null.NewString(slug.String, slug.Valid),
 		Font:         appearance,
 		Language:     zero.NewString(post.Language.String, post.Language.Valid),
 		RTL:          zero.NewBool(post.IsRTL.Bool, post.IsRTL.Valid),
 		OwnerID:      null.NewInt(userID, true),
-		CollectionID: null.NewInt(userID, true),
+		CollectionID: null.NewInt(collID, ownerCollID.Valid),
 		Created:      created.Truncate(time.Second).UTC(),
 		Updated:      time.Now().Truncate(time.Second).UTC(),
 		Title:        zero.NewString(*(post.Title), true),
 		Content:      *(post.Content),
-	}, nil
+		Tags:         normalizePostTags(post.Tags),
+	}
+	db.attachPostCategories(createdPost)
+	return createdPost, nil
 }
 
 // UpdateOwnedPost updates an existing post with only the given fields in the
@@ -776,6 +814,7 @@ func (db *datastore) CreatePost(userID, collID int64, post *SubmittedPost) (*Pos
 func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) error {
 	params := []interface{}{}
 	var queryUpdates, sep, authCondition string
+	shouldUpdateTags := post.Tags != nil
 	if post.Slug != nil && *post.Slug != "" {
 		queryUpdates += sep + "slug = ?"
 		sep = ", "
@@ -816,6 +855,31 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 		sep = ", "
 		params = append(params, createTime)
 	}
+	if queryUpdates == "" && !shouldUpdateTags {
+		return ErrPostNoUpdatableVals
+	}
+
+	var inferredCollectionID int64
+	if post.CategoriesSet {
+		var collID sql.NullInt64
+		err := db.QueryRow("SELECT collection_id FROM posts WHERE id = ? AND owner_id = ?", post.ID, userID).Scan(&collID)
+		switch {
+		case err == sql.ErrNoRows:
+			return ErrUnauthorizedEditPost
+		case err != nil:
+			return err
+		}
+		if !collID.Valid || collID.Int64 == 0 {
+			var collCount int64
+			err = db.QueryRow("SELECT COUNT(*), COALESCE(MIN(id), 0) FROM collections WHERE owner_id = ?", userID).Scan(&collCount, &inferredCollectionID)
+			if err != nil {
+				return err
+			}
+			if collCount != 1 || inferredCollectionID == 0 {
+				return impart.HTTPError{Status: http.StatusBadRequest, Message: "Only collection posts can be assigned to categories."}
+			}
+		}
+	}
 
 	// WHERE parameters...
 	// id = ?
@@ -824,33 +888,69 @@ func (db *datastore) UpdateOwnedPost(post *AuthenticatedPost, userID int64) erro
 	authCondition = "(owner_id = ?)"
 	params = append(params, userID)
 
-	if queryUpdates == "" {
+	if queryUpdates == "" && !shouldUpdateTags {
 		return ErrPostNoUpdatableVals
 	}
 
-	queryUpdates += sep + "updated = " + db.now()
-
-	res, err := db.Exec("UPDATE posts SET "+queryUpdates+" WHERE id = ? AND "+authCondition, params...)
+	tx, err := db.Begin()
 	if err != nil {
-		log.Error("Unable to update owned post: %v", err)
 		return err
 	}
 
-	rowsAffected, _ := res.RowsAffected()
-	if rowsAffected == 0 {
-		// Show the correct error message if nothing was updated
-		var dummy int
-		err := db.QueryRow("SELECT 1 FROM posts WHERE id = ? AND "+authCondition, post.ID, params[len(params)-1]).Scan(&dummy)
-		switch {
-		case err == sql.ErrNoRows:
-			return ErrUnauthorizedEditPost
-		case err != nil:
-			log.Error("Failed selecting from posts: %v", err)
+	if queryUpdates != "" {
+		queryUpdates += sep + "updated = " + db.now()
+		res, err := tx.Exec("UPDATE posts SET "+queryUpdates+" WHERE id = ? AND "+authCondition, params...)
+		if err != nil {
+			tx.Rollback()
+			log.Error("Unable to update owned post: %v", err)
+			return err
 		}
-		return nil
+		_, _ = res.RowsAffected()
 	}
 
-	return nil
+	var collectionID sql.NullInt64
+	err = tx.QueryRow("SELECT collection_id FROM posts WHERE id = ? AND "+authCondition, post.ID, userID).Scan(&collectionID)
+	switch {
+	case err == sql.ErrNoRows:
+		tx.Rollback()
+		return ErrUnauthorizedEditPost
+	case err != nil:
+		tx.Rollback()
+		log.Error("Failed selecting from posts: %v", err)
+		return err
+	}
+
+	if shouldUpdateTags {
+		tagCollectionID := collectionID.Int64
+		if !collectionID.Valid || tagCollectionID <= 0 {
+			tagCollectionID, err = db.getSingleOwnerCollectionID(tx, userID)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+		if err = db.assignPostTagsTx(tx, post.ID, tagCollectionID, normalizePostTags(post.Tags)); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	if post.CategoriesSet {
+		collID := collectionID
+		if !collID.Valid || collID.Int64 == 0 {
+			if inferredCollectionID == 0 {
+				tx.Rollback()
+				return impart.HTTPError{Status: http.StatusBadRequest, Message: "Only collection posts can be assigned to categories."}
+			}
+			collID = sql.NullInt64{Int64: inferredCollectionID, Valid: true}
+		}
+		if err := db.assignPostCategoriesTx(tx, post.ID, collID.Int64, post.Categories); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (db *datastore) GetCollectionBy(condition string, value interface{}) (*Collection, error) {
@@ -917,9 +1017,6 @@ func (db *datastore) UpdateCollection(app *App, c *SubmittedCollection, alias st
 	// Truncate fields correctly, so we don't get "Data too long for column" errors in MySQL (writefreely#600)
 	if c.Title != nil {
 		*c.Title = parse.Truncate(*c.Title, collMaxLengthTitle)
-	}
-	if c.Description != nil {
-		*c.Description = parse.Truncate(*c.Description, collMaxLengthDescription)
 	}
 
 	q := query.NewUpdate().
@@ -1121,6 +1218,10 @@ func (db *datastore) UpdateCollection(app *App, c *SubmittedCollection, alias st
 
 const postCols = "id, slug, text_appearance, language, rtl, privacy, owner_id, collection_id, pinned_position, created, updated, view_count, title, content"
 
+func prefixedPostCols(prefix string) string {
+	return prefix + strings.ReplaceAll(postCols, ", ", ", "+prefix)
+}
+
 // getEditablePost returns a PublicPost with the given ID only if the given
 // edit token is valid for the post.
 func (db *datastore) GetEditablePost(id, editToken string) (*PublicPost, error) {
@@ -1143,7 +1244,13 @@ func (db *datastore) GetEditablePost(id, editToken string) (*PublicPost, error) 
 		return nil, ErrPostUnpublished
 	}
 
+	err = db.loadPostTags(p)
+	if err != nil {
+		return nil, err
+	}
+
 	res := p.processPost()
+	db.attachPostCategories(p)
 	if ownerName.Valid {
 		res.Owner = &PublicUser{Username: ownerName.String}
 	}
@@ -1198,6 +1305,10 @@ func (db *datastore) GetPost(id string, collectionID int64) (*PublicPost, error)
 	if err != nil {
 		return nil, err
 	}
+	err = db.loadPostTags(p)
+	if err != nil {
+		return nil, err
+	}
 
 	res := p.processPost()
 	if ownerName.Valid {
@@ -1228,7 +1339,13 @@ func (db *datastore) GetOwnedPost(id string, ownerID int64) (*PublicPost, error)
 		return nil, ErrPostUnpublished
 	}
 
+	err = db.loadPostTags(p)
+	if err != nil {
+		return nil, err
+	}
+
 	res := p.processPost()
+	db.attachPostCategories(p)
 
 	return &res, nil
 }
@@ -1348,6 +1465,10 @@ func (db *datastore) GetPosts(cfg *config.Config, c *Collection, page int, inclu
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
+		err = db.loadPostTags(p)
+		if err != nil {
+			return nil, err
+		}
 		p.extractData()
 		p.augmentContent(c)
 		p.formatContent(cfg, c, includeFuture, false)
@@ -1383,11 +1504,11 @@ func (db *datastore) GetAllPostsTaggedIDs(c *Collection, tag string, includeFutu
 	}
 	var rows *sql.Rows
 	var err error
-	if db.driverName == driverSQLite {
-		rows, err = db.Query("SELECT id FROM posts WHERE collection_id = ? AND LOWER(content) regexp ? "+timeCondition+" ORDER BY created "+order, collID, `.*#`+strings.ToLower(tag)+`\b.*`)
-	} else {
-		rows, err = db.Query("SELECT id FROM posts WHERE collection_id = ? AND LOWER(content) RLIKE ? "+timeCondition+" ORDER BY created "+order, collID, "#"+strings.ToLower(tag)+"[[:>:]]")
-	}
+	rows, err = db.Query(`SELECT p.id
+FROM posts p
+INNER JOIN post_tags pt ON pt.post_id = p.id
+INNER JOIN tags t ON t.id = pt.tag_id
+WHERE p.collection_id = ? AND t.collection_id = ? AND t.slug = ? `+timeCondition+` ORDER BY p.created `+order, collID, collID, strings.ToLower(tag))
 	if err != nil {
 		log.Error("Failed selecting tagged posts: %v", err)
 		return nil, impart.HTTPError{http.StatusInternalServerError, "Couldn't retrieve tagged collection posts."}
@@ -1444,19 +1565,12 @@ func (db *datastore) GetPostsTagged(cfg *config.Config, c *Collection, tag strin
 
 	var rows *sql.Rows
 	var err error
-	if db.driverName == driverSQLite {
-		rows, err = db.Query("SELECT "+postCols+" FROM posts WHERE collection_id = ? AND LOWER(content) regexp ? "+timeCondition+" ORDER BY created "+order+limitStr, collID, `.*#`+strings.ToLower(tag)+`\b.*`)
-	} else {
-		var boundaryRegex string
-		if db.useSpencerRegex {
-			// MySQL earlier than 8.0.4, Henry Spencer's regex implementation
-			boundaryRegex = "[[:>:]]"
-		} else {
-			// MySQL 8.0.4+, International Components for Unicode (ICU) syntax
-			boundaryRegex = "\\b"
-		}
-		rows, err = db.Query("SELECT "+postCols+" FROM posts WHERE collection_id = ? AND LOWER(content) RLIKE ? "+timeCondition+" ORDER BY created "+order+limitStr, collID, "#"+strings.ToLower(tag)+boundaryRegex)
-	}
+	rows, err = db.Query(`SELECT `+prefixedPostCols("p.")+`
+FROM posts p
+INNER JOIN post_tags pt ON pt.post_id = p.id
+INNER JOIN tags t ON t.id = pt.tag_id
+WHERE p.collection_id = ? AND t.collection_id = ? AND t.slug = ? `+timeCondition+`
+ORDER BY p.created `+order+limitStr, collID, collID, strings.ToLower(tag))
 	if err != nil {
 		log.Error("Failed selecting from posts: %v", err)
 		return nil, impart.HTTPError{http.StatusInternalServerError, "Couldn't retrieve collection posts."}
@@ -1471,6 +1585,10 @@ func (db *datastore) GetPostsTagged(cfg *config.Config, c *Collection, tag strin
 		if err != nil {
 			log.Error("Failed scanning row: %v", err)
 			break
+		}
+		err = db.loadPostTags(p)
+		if err != nil {
+			return nil, err
 		}
 		p.extractData()
 		p.augmentContent(c)
@@ -1539,6 +1657,10 @@ ORDER BY created `+order+limitStr, collID, lang)
 		if err != nil {
 			log.Error("Failed scanning row: %v", err)
 			break
+		}
+		err = db.loadPostTags(p)
+		if err != nil {
+			return nil, err
 		}
 		p.extractData()
 		p.augmentContent(c)
@@ -1818,6 +1940,26 @@ func (db *datastore) ClaimPosts(cfg *config.Config, userID int64, collAlias stri
 			continue
 		}
 
+		if coll != nil {
+			postTags, tagErr := db.GetPostTags(p.ID)
+			if tagErr != nil {
+				r.Code = http.StatusInternalServerError
+				r.ErrorMessage = "An unknown error occurred."
+				r.ID = p.ID
+				res = append(res, r)
+				log.Error("claimPosts (load tags for post %s): %v", p.ID, tagErr)
+				continue
+			}
+			if err = db.AssignPostTags(p.ID, coll.ID, postTags); err != nil {
+				r.Code = http.StatusInternalServerError
+				r.ErrorMessage = "An unknown error occurred."
+				r.ID = p.ID
+				res = append(res, r)
+				log.Error("claimPosts (assign tags for post %s): %v", p.ID, err)
+				continue
+			}
+		}
+
 		// Get full post information to return
 		var fullPost *PublicPost
 		if p.Token != "" {
@@ -1916,6 +2058,10 @@ func (db *datastore) GetPinnedPosts(coll *CollectionObj, includeFuture bool) (*[
 		if err != nil {
 			log.Error("Failed scanning row: %v", err)
 			break
+		}
+		err = db.loadPostTags(p)
+		if err != nil {
+			return nil, err
 		}
 		p.extractData()
 		p.augmentContent(&coll.Collection)
@@ -2088,6 +2234,12 @@ func (db *datastore) GetTopPosts(u *User, alias string, hostName string) (*[]Pub
 			gotErr = true
 			break
 		}
+		err = db.loadPostTags(&p)
+		if err != nil {
+			log.Error("Failed GetPostTags(%s): %v", p.ID, err)
+			gotErr = true
+			break
+		}
 		p.extractData()
 		pubPost := p.processPost()
 
@@ -2148,6 +2300,10 @@ func (db *datastore) GetAnonymousPosts(u *User, page int) (*[]PublicPost, error)
 			log.Error("Failed scanning row: %v", err)
 			break
 		}
+		err = db.loadPostTags(&p)
+		if err != nil {
+			return nil, err
+		}
 		p.extractData()
 
 		posts = append(posts, p.processPost())
@@ -2178,6 +2334,12 @@ func (db *datastore) GetUserPosts(u *User) (*[]PublicPost, error) {
 		err = rows.Scan(&p.ID, &p.Slug, &p.ViewCount, &p.Title, &p.Created, &p.Updated, &p.Content, &p.Font, &p.Language, &p.RTL, &alias, &title, &description, &views)
 		if err != nil {
 			log.Error("Failed scanning User.getPosts() row: %v", err)
+			gotErr = true
+			break
+		}
+		err = db.loadPostTags(&p)
+		if err != nil {
+			log.Error("Failed GetPostTags(%s): %v", p.ID, err)
 			gotErr = true
 			break
 		}

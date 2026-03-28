@@ -30,18 +30,20 @@ var (
 	pages     = map[string]*template.Template{}
 	userPages = map[string]*template.Template{}
 	funcMap   = template.FuncMap{
-		"largeNumFmt": largeNumFmt,
-		"pluralize":   pluralize,
-		"isRTL":       isRTL,
-		"isLTR":       isLTR,
-		"localstr":    localStr,
-		"localhtml":   localHTML,
-		"tolower":     strings.ToLower,
-		"title":       strings.Title,
-		"hasPrefix":   strings.HasPrefix,
-		"hasSuffix":   strings.HasSuffix,
-		"dict":        dict,
+		"largeNumFmt":   largeNumFmt,
+		"pluralize":     pluralize,
+		"isRTL":         isRTL,
+		"isLTR":         isLTR,
+		"localstr":      localStr,
+		"localhtml":     localHTML,
+		"tolower":       strings.ToLower,
+		"title":         strings.Title,
+		"hasPrefix":     strings.HasPrefix,
+		"hasSuffix":     strings.HasSuffix,
+		"dict":          dict,
+		"categoryPosts": categoryPosts,
 	}
+	templateApp *App
 )
 
 const (
@@ -70,14 +72,14 @@ func initTemplate(parentDir, name string) {
 		filepath.Join(parentDir, templatesDir, "base.tmpl"),
 		filepath.Join(parentDir, templatesDir, "user", "include", "silenced.tmpl"),
 	}
-	if name == "collection" || name == "collection-tags" || name == "collection-archive" || name == "chorus-collection" || name == "read" {
+	if name == "collection" || name == "collection-tags" || name == "collection-archive" || name == "category" || name == "chorus-collection" || name == "read" {
 		// These pages list out collection posts, so we also parse templatesDir + "include/posts.tmpl"
 		files = append(files, filepath.Join(parentDir, templatesDir, "include", "posts.tmpl"))
 	}
 	if name == "chorus-collection" || name == "chorus-collection-post" {
 		files = append(files, filepath.Join(parentDir, templatesDir, "user", "include", "header.tmpl"))
 	}
-	if name == "collection" || name == "collection-tags" || name == "collection-archive" || name == "collection-post" || name == "post" || name == "chorus-collection" || name == "chorus-collection-post" {
+	if name == "collection" || name == "collection-tags" || name == "collection-archive" || name == "category" || name == "collection-post" || name == "post" || name == "chorus-collection" || name == "chorus-collection-post" {
 		files = append(files, filepath.Join(parentDir, templatesDir, "include", "post-render.tmpl"))
 	}
 	templates[name] = template.Must(template.New("").Funcs(funcMap).ParseFiles(files...))
@@ -237,4 +239,17 @@ func dict(values ...interface{}) (map[string]interface{}, error) {
 		dict[key] = values[i+1]
 	}
 	return dict, nil
+}
+
+func categoryPosts(posts []PublicPost, slug string) []PublicPost {
+	filtered := make([]PublicPost, 0, len(posts))
+	for _, post := range posts {
+		for _, category := range post.Categories {
+			if category.Slug == slug {
+				filtered = append(filtered, post)
+				break
+			}
+		}
+	}
+	return filtered
 }

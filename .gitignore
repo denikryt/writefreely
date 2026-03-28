@@ -10,3 +10,7 @@ tmp
 *.db
 
 bindata.go
+.env
+.env.*
+!.env.example
+writefreely

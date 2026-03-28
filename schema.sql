@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS `collections` (
   `id` int(6) NOT NULL AUTO_INCREMENT,
   `alias` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
-  `description` varchar(160) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `style_sheet` text,
   `script` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   `format` varchar(8) DEFAULT NULL,
@@ -142,8 +142,6 @@ CREATE TABLE IF NOT EXISTS `posts` (
   UNIQUE KEY `owner_id` (`owner_id`,`id`),
   KEY `privacy_id` (`privacy`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-
--- --------------------------------------------------------
 
 --
 -- Table structure for table `remotefollows`

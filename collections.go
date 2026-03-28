@@ -42,8 +42,7 @@ import (
 const (
 	collAttrLetterReplyTo = "letter_reply_to"
 
-	collMaxLengthTitle       = 255
-	collMaxLengthDescription = 160
+	collMaxLengthTitle = 255
 )
 
 type (
@@ -78,6 +77,7 @@ type (
 		TotalPosts int           `json:"total_posts"`
 		Owner      *User         `json:"owner,omitempty"`
 		Posts      *[]PublicPost `json:"posts,omitempty"`
+		Categories []Category    `json:"categories,omitempty"`
 		Format     *CollectionFormat
 	}
 	DisplayCollection struct {
@@ -840,6 +840,11 @@ func newDisplayCollection(c *Collection, cr *collectionReq, page int) (*DisplayC
 	if err != nil {
 		return nil, err
 	}
+	categories, err := c.db.GetCategoriesByCollection(c.ID)
+	if err != nil {
+		return nil, err
+	}
+	coll.Categories = categories
 	return coll, nil
 }
 

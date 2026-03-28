@@ -135,8 +135,6 @@ CREATE TABLE IF NOT EXISTS `posts` (
   CONSTRAINT privacy_id UNIQUE (privacy, id)
 );
 
--- --------------------------------------------------------
-
 --
 -- Table structure for table remotefollows
 --

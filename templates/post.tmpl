@@ -1,7 +1,17 @@
 {{define "post"}}<!DOCTYPE HTML>
-<html {{if .Language}}lang="{{.Language}}"{{end}} dir="{{.Direction}}">
+<html class="light" {{if .Language}}lang="{{.Language}}"{{end}} dir="{{.Direction}}">
 	<head prefix="og: http://ogp.me/ns#">
 		<meta charset="utf-8">
+		<script type="text/javascript">
+			(function () {
+				var theme = localStorage.getItem('padTheme');
+				if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+					theme = 'dark';
+				}
+				document.documentElement.classList.remove('light', 'dark');
+				document.documentElement.classList.add(theme || 'light');
+			})();
+		</script>
 
 		<title>{{if .Title}}{{.Title}}{{else}}{{.GenTitle}}{{end}} {{localhtml "title dash" .Language}} {{.SiteName}}</title>
 		
@@ -9,6 +19,7 @@
 		<link rel="stylesheet" href="/css/lib/mono-blue.min.css">
 		{{end}}
 		<link rel="stylesheet" type="text/css" href="/css/write.css" />
+		<link rel="stylesheet" type="text/css" href="/css/fonts.css" />
 		{{if .CustomCSS}}<link rel="stylesheet" type="text/css" href="/local/custom.css" />{{end}}
 		<link rel="shortcut icon" href="/favicon.ico" />
 		<link rel="canonical" href="{{.Host}}/{{if .SingleUser}}d/{{end}}{{.ID}}" />
@@ -54,7 +65,7 @@
 			{{template "user-silenced"}}
 		{{end}}
 		
-		<article class="{{.Font}} h-entry">{{if .Title}}<h2 id="title" class="p-name">{{.Title}}</h2>{{end}}{{ if .IsPlainText }}<p id="post-body" class="e-content">{{.Content}}</p>{{ else }}<div id="post-body" class="e-content">{{.HTMLContent}}</div>{{ end }}</article>
+		<article class="{{.Font}} h-entry">{{if .Title}}<h2 id="title" class="p-name">{{.Title}}</h2>{{end}}{{ if .IsPlainText }}<p id="post-body" class="e-content">{{.Content}}</p>{{ else }}<div id="post-body" class="e-content">{{.HTMLContent}}</div>{{ end }}{{if .Tags}}<div class="post-tags" dir="ltr">{{range $i, $tag := .Tags}}{{if $i}}<span class="tag-separator">&middot;</span>{{end}}<a href="/tag:{{$tag}}">{{$tag}}</a>{{end}}</div>{{end}}</article>
 
 		<footer dir="ltr"><hr><nav><p style="font-size: 0.9em">{{localhtml "published with write.as" .Language}}</p></nav></footer>
 	</body>
@@ -69,20 +80,6 @@
 	{{if .IsPlainText}}<script src="/js/twitter-text.min.js"></script>{{end}}
 	{{end}}
 	<script type="text/javascript">
-	try {
-	  WebFontConfig = {
-		custom: { families: [ 'Lora:400,700:latin'{{if eq .Font "sans"}}, 'Open+Sans:400,700:latin'{{end}} ], urls: [ '/css/fonts.css' ] }
-	  };
-	  (function() {
-		var wf = document.createElement('script');
-		wf.src = '/js/webfont.js';
-		wf.type = 'text/javascript';
-		wf.async = 'true';
-		var s = document.getElementsByTagName('script')[0];
-		s.parentNode.insertBefore(wf, s);
-	  })();
-	} catch (e) { /* ¯\_(ツ)_/¯ */ }
-
 	var posts = localStorage.getItem('posts');
 	if (posts != null) {
 		posts = JSON.parse(posts);
@@ -99,4 +96,6 @@
 		}
 	}
 	</script>
+	<a id="global-theme-toggle" class="global-theme-toggle global-theme-toggle--floating" href="#theme" title="Toggle theme" data-theme-toggle="true"><img class="ic-24dp" src="/img/ic_brightness_dark@2x.png" /></a>
+	<script src="/js/theme.js"></script>
 </html>{{end}}
